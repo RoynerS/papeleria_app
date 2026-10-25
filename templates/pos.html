@@ -637,14 +637,14 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Procesando...';
 
-        // Filtrar productos reales para descontar stock en BD
-        const dbItems = cart.filter(i => i.id > 0);
-
         try {
             const response = await fetch('/checkout', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cart: dbItems })
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({ cart })
             });
             const data = await response.json();
 

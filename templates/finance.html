@@ -197,6 +197,7 @@
                 </button>
             </div>
             <form action="{{ url_for('add_expense') }}" method="POST" id="addExpenseForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="category" id="exp-category" value="General">
                 <input type="hidden" name="quantity" id="exp-qty-hidden" value="1">
                 <input type="hidden" name="unit_price" id="exp-uprice-hidden" value="0">
@@ -294,6 +295,7 @@
                 <button type="button" class="btn-close-modern" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i></button>
             </div>
             <form id="editExpenseForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="modal-body-modern">
                     <div class="mb-3">
                         <label class="form-label-modern">Descripción *</label>
@@ -349,6 +351,7 @@
                 <h6 class="fw-bold mb-1">¿Eliminar gasto?</h6>
                 <p class="text-muted small mb-4" id="delete-expense-name"></p>
                 <form id="deleteExpenseForm" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="d-flex gap-2 justify-content-center">
                         <button type="button" class="btn-action btn-action-ghost" data-bs-dismiss="modal">Cancelar</button>
                         <button type="submit" class="btn-action btn-action-danger"><i class="bi bi-trash3-fill"></i> Eliminar</button>
@@ -368,6 +371,7 @@
                 <p class="text-muted small mb-1" id="delete-sale-total"></p>
                 <p class="text-muted small mb-4">El stock de los productos será revertido.</p>
                 <form id="deleteSaleForm" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="d-flex gap-2 justify-content-center">
                         <button type="button" class="btn-action btn-action-ghost" data-bs-dismiss="modal">Cancelar</button>
                         <button type="submit" class="btn-action btn-action-danger"><i class="bi bi-trash3-fill"></i> Anular</button>
