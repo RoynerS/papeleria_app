@@ -94,6 +94,7 @@ def init_db():
         statements = [
             '''CREATE TABLE IF NOT EXISTS customers (
                 national_id TEXT PRIMARY KEY, email TEXT, points INTEGER NOT NULL DEFAULT 0,
+                consent_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'America/Bogota'))''',
             '''CREATE TABLE IF NOT EXISTS products (
                 id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, barcode TEXT UNIQUE,
@@ -131,6 +132,7 @@ def init_db():
         conn.execute('ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS item_name TEXT')
         conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_id TEXT REFERENCES customers(national_id)')
         conn.execute('ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT')
+        conn.execute('ALTER TABLE customers ADD COLUMN IF NOT EXISTS consent_at TIMESTAMP')
         conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_email TEXT')
         conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0')
         conn.execute('ALTER TABLE sales_audit ADD COLUMN IF NOT EXISTS customer_id TEXT')
@@ -143,6 +145,7 @@ def init_db():
             national_id TEXT PRIMARY KEY,
             email TEXT,
             points INTEGER NOT NULL DEFAULT 0,
+            consent_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
@@ -212,6 +215,7 @@ def init_db():
             'ALTER TABLE sale_items ADD COLUMN item_name TEXT',
             'ALTER TABLE sales ADD COLUMN customer_id TEXT',
             'ALTER TABLE customers ADD COLUMN email TEXT',
+            'ALTER TABLE customers ADD COLUMN consent_at TIMESTAMP',
             'ALTER TABLE sales ADD COLUMN customer_email TEXT',
             'ALTER TABLE sales ADD COLUMN points_earned INTEGER NOT NULL DEFAULT 0',
             'ALTER TABLE sales_audit ADD COLUMN customer_email TEXT',
@@ -356,6 +360,42 @@ def sales_audit():
             entry['items_list'] = []
         audit_entries.append(entry)
     return render_template('sales_audit.html', audit_entries=audit_entries)
+
+@app.route('/customers')
+def customers():
+    conn = get_db_connection()
+    customer_rows = conn.execute('''
+        SELECT c.national_id, c.email, c.points, c.consent_at, c.created_at,
+               COUNT(s.id) AS purchase_count, MAX(s.date) AS last_purchase
+        FROM customers c LEFT JOIN sales s ON s.customer_id=c.national_id
+        GROUP BY c.national_id, c.email, c.points, c.consent_at, c.created_at
+        ORDER BY c.created_at DESC, c.national_id
+    ''').fetchall()
+    conn.close()
+    customer_list = [dict(row) for row in customer_rows]
+    return render_template('customers.html',
+                           customer_list=customer_list,
+                           customer_count=len(customer_list),
+                           email_count=sum(bool(row['email']) for row in customer_list),
+                           total_points=sum(int(row['points'] or 0) for row in customer_list))
+
+@app.route('/customers/<national_id>/email', methods=['POST'])
+def update_customer_email(national_id):
+    email = request.form.get('email', '').strip().lower()
+    if not national_id.isdigit() or not 6 <= len(national_id) <= 15:
+        flash('La cédula no es válida.', 'error')
+        return redirect(url_for('customers'))
+    if email and (len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)):
+        flash('Ingresa un correo válido.', 'error')
+        return redirect(url_for('customers'))
+    conn = get_db_connection()
+    result = conn.execute('UPDATE customers SET email=? WHERE national_id=?',
+                          (email or None, national_id))
+    conn.commit()
+    conn.close()
+    flash('Correo actualizado.' if result.rowcount else 'No se encontró ese cliente.',
+          'success' if result.rowcount else 'error')
+    return redirect(url_for('customers'))
 
 # ─── CRUD PRODUCTOS ────────────────────────────────────────────────────────
 
@@ -625,11 +665,12 @@ def get_customer(national_id):
     if not national_id.isdigit() or not 6 <= len(national_id) <= 15:
         return jsonify({'success': False, 'error': 'Cédula inválida'}), 400
     conn = get_db_connection()
-    customer = conn.execute('SELECT email, points FROM customers WHERE national_id=?', (national_id,)).fetchone()
+    customer = conn.execute('SELECT email, points, consent_at FROM customers WHERE national_id=?', (national_id,)).fetchone()
     conn.close()
     if not customer:
         return jsonify({'success': True, 'found': False})
-    return jsonify({'success': True, 'found': True, 'email': customer['email'], 'points': customer['points']})
+    return jsonify({'success': True, 'found': True, 'email': customer['email'],
+                    'points': customer['points'], 'has_consent': bool(customer['consent_at'])})
 
 @app.route('/checkout', methods=['POST'])
 def checkout():
@@ -645,6 +686,7 @@ def checkout():
     if customer_email and (not customer_id or len(customer_email) > 254 or
                            not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", customer_email)):
         return jsonify({'success': False, 'error': 'Ingresa una cédula válida y un correo con formato correcto'}), 400
+    customer_consent = data.get('customer_consent') is True
 
     conn = get_db_connection()
     try:
@@ -683,16 +725,21 @@ def checkout():
         points_earned = int(total // 1000) if customer_id else 0
         customer_points = None
         if customer_id:
-            customer = conn.execute('SELECT points FROM customers WHERE national_id=?', (customer_id,)).fetchone()
+            customer = conn.execute('SELECT points, email, consent_at FROM customers WHERE national_id=?',
+                                     (customer_id,)).fetchone()
+            if not customer_consent:
+                return jsonify({'success': False,
+                                'error': 'Para asociar cédula, correo y puntos necesitamos autorización del cliente. Si no desea registrarse, quita la cédula y continúa la venta.'}), 400
             if customer:
                 customer_points = int(customer['points']) + points_earned
-                stored_customer = conn.execute('SELECT email FROM customers WHERE national_id=?', (customer_id,)).fetchone()
-                customer_email = customer_email or stored_customer['email'] or ''
-                conn.execute('UPDATE customers SET points=?, email=COALESCE(NULLIF(?, \'\'), email) WHERE national_id=?',
+                customer_email = customer_email or customer['email'] or ''
+                conn.execute('''UPDATE customers SET points=?, email=COALESCE(NULLIF(?, ''), email),
+                                consent_at=COALESCE(consent_at, CURRENT_TIMESTAMP) WHERE national_id=?''',
                              (customer_points, customer_email, customer_id))
             else:
                 customer_points = points_earned
-                conn.execute('INSERT INTO customers (national_id, email, points) VALUES (?,?,?)',
+                conn.execute('''INSERT INTO customers (national_id, email, points, consent_at)
+                                VALUES (?,?,?,CURRENT_TIMESTAMP)''',
                              (customer_id, customer_email or None, customer_points))
 
         if app.config['DATABASE_URL']:

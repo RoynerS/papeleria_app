@@ -255,6 +255,12 @@
                         maxlength="254" placeholder="cliente@correo.com">
                     <small class="text-muted" id="customer-email-help">Ingresa también la cédula para guardar el correo con los puntos del cliente.</small>
                 </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="customer-data-consent">
+                    <label class="form-check-label small text-secondary" for="customer-data-consent">
+                        Autorizo usar esta cédula y correo para asociar mis compras, acumular puntos y gestionar el comprobante de compra.
+                    </label>
+                </div>
 
                 <!-- Caja de Cambio Calculado -->
                 <div class="p-3 rounded-3 text-center" id="change-box"
@@ -308,6 +314,7 @@
     let heldSales = [];
     let checkoutModalInstance = null;
     let audioCtx = null;
+    let customerConsentTouched = false;
     const formatCOP = value => new Intl.NumberFormat('es-CO', {
         style: 'currency', currency: 'COP', maximumFractionDigits: 0
     }).format(Number(value) || 0);
@@ -370,10 +377,19 @@
             try {
                 const response = await fetch(`/api/customer/${encodeURIComponent(nationalId)}`);
                 const customer = await response.json();
+                if (event.target.value.trim() !== nationalId) return;
                 if (customer.success && customer.found && !emailInput.value && customer.email) {
                     emailInput.value = customer.email;
+                }
+                if (customer.success && customer.found) {
+                    if (!customerConsentTouched) {
+                        document.getElementById('customer-data-consent').checked = customer.has_consent;
+                    }
                     document.getElementById('customer-email-help').textContent =
-                        `Correo cargado · ${customer.points} puntos acumulados`;
+                        `Cliente registrado · ${customer.points} puntos acumulados`;
+                } else if (customer.success) {
+                    document.getElementById('customer-email-help').textContent =
+                        'Nuevo cliente: al autorizar, guardaremos su cédula, correo y puntos.';
                 }
             } catch (error) {
                 // La venta puede continuar aunque no esté disponible la consulta de clientes.
@@ -381,8 +397,13 @@
         });
         document.getElementById('customer-national-id').addEventListener('input', () => {
             document.getElementById('customer-email').value = '';
+            document.getElementById('customer-data-consent').checked = false;
+            customerConsentTouched = false;
             document.getElementById('customer-email-help').textContent =
                 'Ingresa también la cédula para guardar el correo con los puntos del cliente.';
+        });
+        document.getElementById('customer-data-consent').addEventListener('change', () => {
+            customerConsentTouched = true;
         });
         updateHoldBadge();
     });
@@ -702,7 +723,8 @@
                 body: JSON.stringify({
                     cart,
                     customer_id: document.getElementById('customer-national-id').value.trim(),
-                    customer_email: document.getElementById('customer-email').value.trim()
+                    customer_email: document.getElementById('customer-email').value.trim(),
+                    customer_consent: document.getElementById('customer-data-consent').checked
                 })
             });
             const data = await response.json();
@@ -727,6 +749,8 @@
                 cart = [];
                 document.getElementById('customer-national-id').value = '';
                 document.getElementById('customer-email').value = '';
+                document.getElementById('customer-data-consent').checked = false;
+                customerConsentTouched = false;
                 document.getElementById('customer-email-help').textContent =
                     'Se guarda junto con la cédula para futuras compras.';
                 renderCart();

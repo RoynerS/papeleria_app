@@ -1,0 +1,94 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-header mb-4">
+    <div>
+        <h1 class="page-title"><i class="bi bi-people text-primary"></i> Clientes y puntos</h1>
+        <p class="page-subtitle">Cada cliente se registra con su cédula al comprar. En próximas ventas, vuelve a escribirla para sumar puntos automáticamente.</p>
+    </div>
+    <a href="{{ url_for('pos') }}" class="btn-action btn-action-primary"><i class="bi bi-cart3"></i> Ir al punto de venta</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-sm-4">
+        <div class="kpi-card kpi-indigo">
+            <div class="kpi-icon"><i class="bi bi-person-check"></i></div>
+            <div class="kpi-body"><span class="kpi-label">Clientes registrados</span><span class="kpi-value">{{ customer_count }}</span></div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="kpi-card kpi-green">
+            <div class="kpi-icon"><i class="bi bi-envelope-check"></i></div>
+            <div class="kpi-body"><span class="kpi-label">Con correo</span><span class="kpi-value">{{ email_count }}</span></div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="kpi-card kpi-indigo">
+            <div class="kpi-icon"><i class="bi bi-stars"></i></div>
+            <div class="kpi-body"><span class="kpi-label">Puntos disponibles</span><span class="kpi-value">{{ "{:,.0f}".format(total_points) }}</span></div>
+        </div>
+    </div>
+</div>
+
+<div class="glass-panel">
+    <div class="glass-panel-header">
+        <div class="glass-panel-title"><i class="bi bi-card-list text-primary"></i> Registro de clientes</div>
+        <div class="search-bar-modern customer-search">
+            <i class="bi bi-search"></i>
+            <input type="search" id="customer-search" class="form-control-modern" placeholder="Buscar por cédula o correo">
+        </div>
+    </div>
+    <div class="glass-panel-body p-0">
+        <div class="table-responsive">
+            <table class="table-modern" id="customers-table">
+                <thead><tr>
+                    <th>Cédula</th><th>Correo</th><th>Autorización</th><th class="text-end">Puntos</th>
+                    <th class="text-end">Compras</th><th>Última compra</th><th>Gestión de correo</th>
+                </tr></thead>
+                <tbody>
+                    {% for customer in customer_list %}
+                    <tr class="customer-row">
+                        <td class="fw-semibold customer-id">{{ customer.national_id }}</td>
+                        <td class="customer-email">{{ customer.email or 'Sin correo registrado' }}</td>
+                        <td>{% if customer.consent_at %}<span class="status-badge status-success">Autorizado</span>{% else %}<span class="status-badge status-warning">Solicitar en caja</span>{% endif %}</td>
+                        <td class="text-end fw-bold text-success">{{ "{:,.0f}".format(customer.points or 0) }}</td>
+                        <td class="text-end">{{ customer.purchase_count or 0 }}</td>
+                        <td><small class="text-muted">{{ customer.last_purchase or '—' }}</small></td>
+                        <td>
+                            <details>
+                                <summary class="text-primary">Editar correo</summary>
+                                <form method="post" action="{{ url_for('update_customer_email', national_id=customer.national_id) }}" class="customer-email-form mt-2">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="email" name="email" value="{{ customer.email or '' }}" maxlength="254"
+                                        class="form-control-modern" placeholder="cliente@correo.com" aria-label="Correo del cliente">
+                                    <button type="submit" class="btn-action btn-action-primary mt-2"><i class="bi bi-save"></i> Guardar</button>
+                                </form>
+                            </details>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr class="customer-empty"><td colspan="7" class="text-center py-5 text-muted">Aún no hay clientes. Registra una cédula durante una venta para empezar a acumular puntos.</td></tr>
+                    {% endfor %}
+                    <tr id="customer-no-results" style="display:none"><td colspan="7" class="text-center py-4 text-muted">No se encontraron clientes con esa búsqueda.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('customer-search').addEventListener('input', event => {
+        const query = event.target.value.trim().toLowerCase();
+        const rows = [...document.querySelectorAll('.customer-row')];
+        let visible = 0;
+        rows.forEach(row => {
+            const match = row.querySelector('.customer-id').textContent.toLowerCase().includes(query) ||
+                row.querySelector('.customer-email').textContent.toLowerCase().includes(query);
+            row.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        document.getElementById('customer-no-results').style.display = rows.length && !visible ? '' : 'none';
+    });
+</script>
+{% endblock %}

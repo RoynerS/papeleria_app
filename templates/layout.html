@@ -48,6 +48,11 @@
                 <span class="sidebar-link-label">Auditoría</span>
                 {% if request.endpoint == 'sales_audit' %}<span class="sidebar-active-dot"></span>{% endif %}
             </a>
+            <a class="sidebar-link {{ 'active' if request.endpoint in ['customers', 'update_customer_email'] else '' }}" href="{{ url_for('customers') }}">
+                <span class="sidebar-link-icon"><i class="bi bi-people"></i></span>
+                <span class="sidebar-link-label">Clientes</span>
+                {% if request.endpoint in ['customers', 'update_customer_email'] %}<span class="sidebar-active-dot"></span>{% endif %}
+            </a>
         </nav>
 
         <div class="sidebar-footer">
