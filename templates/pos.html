@@ -113,8 +113,9 @@
                                         p.stock }} disp.</span>
                                     {% endif %}
                                 </div>
-                                <button type="button" class="btn-modern-primary"
-                                    onclick='addToCart({{ p.id }}, {{ p.name | tojson }}, {{ p.price }}, {{ p.stock }})'>
+                                <button type="button" class="btn-modern-primary js-add-product"
+                                    data-product-id="{{ p.id }}" data-product-name="{{ p.name }}"
+                                    data-product-price="{{ p.price }}" data-product-stock="{{ p.stock }}">
                                     <i class="bi bi-plus-lg"></i> Agregar al carrito
                                 </button>
                             </div>
@@ -253,7 +254,7 @@
                 <div class="p-3 rounded-3 text-center" id="change-box"
                     style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25);">
                     <span class="text-secondary small fw-bold text-uppercase">Cambio a Entregar</span>
-                    <div class="display-6 fw-bold text-success my-1" id="change-display">$0.00</div>
+                    <div class="display-6 fw-bold text-success my-1" id="change-display">$0 COP</div>
                 </div>
             </div>
             <div class="modal-footer border-top-0 pt-0">
@@ -342,7 +343,20 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        checkoutModalInstance = new bootstrap.Modal(document.getElementById('checkoutModal'));
+        const productsGrid = document.getElementById('products-grid');
+        productsGrid?.addEventListener('click', event => {
+            const button = event.target.closest('.js-add-product');
+            if (!button) return;
+            addToCart(
+                Number(button.dataset.productId),
+                button.dataset.productName,
+                Number(button.dataset.productPrice),
+                Number(button.dataset.productStock)
+            );
+        });
+        if (window.bootstrap?.Modal) {
+            checkoutModalInstance = new bootstrap.Modal(document.getElementById('checkoutModal'));
+        }
         updateHoldBadge();
     });
 
