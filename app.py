@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, abort, send_from_directory
 from pathlib import Path
 import hmac
+import json
 import os
 import sqlite3
 
@@ -105,6 +106,11 @@ def init_db():
                 id BIGSERIAL PRIMARY KEY, sale_id BIGINT REFERENCES sales(id),
                 product_id BIGINT REFERENCES products(id), quantity INTEGER,
                 price DOUBLE PRECISION, item_name TEXT)''',
+            '''CREATE TABLE IF NOT EXISTS sales_audit (
+                id BIGSERIAL PRIMARY KEY, sale_id BIGINT NOT NULL, action TEXT NOT NULL,
+                total DOUBLE PRECISION NOT NULL, customer_id TEXT, points_earned INTEGER NOT NULL DEFAULT 0,
+                items TEXT NOT NULL DEFAULT '[]',
+                occurred_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'America/Bogota'))''',
             '''CREATE TABLE IF NOT EXISTS expenses (
                 id BIGSERIAL PRIMARY KEY, description TEXT NOT NULL, category TEXT NOT NULL,
                 amount DOUBLE PRECISION NOT NULL, quantity INTEGER DEFAULT 1,
@@ -122,6 +128,9 @@ def init_db():
         conn.execute('ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS item_name TEXT')
         conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_id TEXT REFERENCES customers(national_id)')
         conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0')
+        conn.execute('ALTER TABLE sales_audit ADD COLUMN IF NOT EXISTS customer_id TEXT')
+        conn.execute('ALTER TABLE sales_audit ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0')
+        conn.execute("ALTER TABLE sales_audit ADD COLUMN IF NOT EXISTS items TEXT NOT NULL DEFAULT '[]'")
     else:
         conn.execute('''
         CREATE TABLE IF NOT EXISTS customers (
@@ -162,6 +171,18 @@ def init_db():
         )
         ''')
         conn.execute('''
+        CREATE TABLE IF NOT EXISTS sales_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            total REAL NOT NULL,
+            customer_id TEXT,
+            points_earned INTEGER NOT NULL DEFAULT 0,
+            items TEXT NOT NULL DEFAULT '[]',
+            occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        conn.execute('''
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             description TEXT NOT NULL,
@@ -187,6 +208,28 @@ def init_db():
                 conn.execute(migration)
             except sqlite3.OperationalError:
                 pass
+    conn.commit()
+    # Preserve an auditable snapshot for sales recorded before this feature existed.
+    legacy_sales = conn.execute('''
+        SELECT s.id, s.total, s.date, s.customer_id, s.points_earned
+        FROM sales s
+        WHERE NOT EXISTS (SELECT 1 FROM sales_audit a WHERE a.sale_id=s.id AND a.action='VENTA REGISTRADA')
+    ''').fetchall()
+    for sale in legacy_sales:
+        sale_items = conn.execute('''
+            SELECT si.product_id, COALESCE(si.item_name, p.name, 'Artículo') AS item_name,
+                   si.quantity, si.price
+            FROM sale_items si LEFT JOIN products p ON p.id=si.product_id
+            WHERE si.sale_id=?
+        ''', (sale['id'],)).fetchall()
+        details = [{'product_id': row['product_id'], 'name': row['item_name'], 'quantity': row['quantity'],
+                    'unit_price': row['price'], 'line_total': float(row['price'] or 0) * int(row['quantity'] or 0)}
+                   for row in sale_items]
+        conn.execute('''
+            INSERT INTO sales_audit (sale_id, action, total, customer_id, points_earned, items, occurred_at)
+            VALUES (?, 'VENTA REGISTRADA', ?, ?, ?, ?, ?)
+        ''', (sale['id'], sale['total'], sale['customer_id'], sale['points_earned'] or 0,
+              json.dumps(details, ensure_ascii=False), sale['date']))
     conn.commit()
     conn.close()
 
@@ -286,6 +329,21 @@ def finance():
         recent_sales=recent_sales,
         recent_expenses=recent_expenses,
         all_products=all_products)
+
+@app.route('/sales_audit')
+def sales_audit():
+    conn = get_db_connection()
+    audit_rows = conn.execute('SELECT * FROM sales_audit ORDER BY id DESC LIMIT 500').fetchall()
+    conn.close()
+    audit_entries = []
+    for row in audit_rows:
+        entry = dict(row)
+        try:
+            entry['items_list'] = json.loads(entry.get('items') or '[]')
+        except (TypeError, ValueError):
+            entry['items_list'] = []
+        audit_entries.append(entry)
+    return render_template('sales_audit.html', audit_entries=audit_entries)
 
 # ─── CRUD PRODUCTOS ────────────────────────────────────────────────────────
 
@@ -498,14 +556,42 @@ def delete_expense(expense_id):
 @app.route('/delete_sale/<int:sale_id>', methods=['POST'])
 def delete_sale(sale_id):
     conn = get_db_connection()
-    # Revertir stock
-    items = conn.execute('SELECT product_id, quantity FROM sale_items WHERE sale_id=? AND product_id IS NOT NULL', (sale_id,)).fetchall()
-    for item in items:
-        conn.execute('UPDATE products SET stock = stock + ? WHERE id=?', (item['quantity'], item['product_id']))
-    conn.execute('DELETE FROM sale_items WHERE sale_id=?', (sale_id,))
-    conn.execute('DELETE FROM sales WHERE id=?', (sale_id,))
-    conn.commit()
-    conn.close()
+    try:
+        sale = conn.execute('SELECT * FROM sales WHERE id=?', (sale_id,)).fetchone()
+        if not sale:
+            flash('No se encontró la venta.', 'error')
+            return redirect(url_for('finance'))
+        # Snapshot the void before deleting the operational sale record.
+        items = conn.execute('''
+            SELECT si.product_id, COALESCE(si.item_name, p.name, 'Artículo') AS item_name,
+                   si.quantity, si.price
+            FROM sale_items si LEFT JOIN products p ON p.id=si.product_id
+            WHERE si.sale_id=?
+        ''', (sale_id,)).fetchall()
+        details = [{'product_id': item['product_id'], 'name': item['item_name'],
+                    'quantity': item['quantity'], 'unit_price': item['price'],
+                    'line_total': float(item['price'] or 0) * int(item['quantity'] or 0)} for item in items]
+        conn.execute('''
+            INSERT INTO sales_audit (sale_id, action, total, customer_id, points_earned, items)
+            VALUES (?, 'VENTA ANULADA', ?, ?, ?, ?)
+        ''', (sale_id, sale['total'], sale['customer_id'], sale['points_earned'] or 0,
+              json.dumps(details, ensure_ascii=False)))
+        for item in items:
+            if item['product_id'] is not None:
+                conn.execute('UPDATE products SET stock = stock + ? WHERE id=?',
+                             (item['quantity'], item['product_id']))
+        if sale['customer_id'] and (sale['points_earned'] or 0):
+            conn.execute('''UPDATE customers SET points=CASE WHEN points>? THEN points-? ELSE 0 END
+                            WHERE national_id=?''',
+                         (sale['points_earned'], sale['points_earned'], sale['customer_id']))
+        conn.execute('DELETE FROM sale_items WHERE sale_id=?', (sale_id,))
+        conn.execute('DELETE FROM sales WHERE id=?', (sale_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     return redirect(url_for('finance'))
 
 # ─── API ───────────────────────────────────────────────────────────────────
@@ -595,6 +681,14 @@ def checkout():
             cur.execute(
                 'INSERT INTO sale_items (sale_id, product_id, quantity, price, item_name) VALUES (?,?,?,?,?)',
                 (sale_id, product_id, quantity, unit_price, item_name))
+        audit_items = [{'product_id': product_id, 'name': item_name, 'quantity': quantity,
+                        'unit_price': unit_price, 'line_total': unit_price * quantity}
+                       for product_id, quantity, unit_price, item_name in verified_items]
+        conn.execute('''
+            INSERT INTO sales_audit (sale_id, action, total, customer_id, points_earned, items)
+            VALUES (?, 'VENTA REGISTRADA', ?, ?, ?, ?)
+        ''', (sale_id, total, customer_id or None, points_earned,
+              json.dumps(audit_items, ensure_ascii=False)))
         conn.commit()
         return jsonify({'success': True, 'sale_id': sale_id, 'total': total,
                         'points_earned': points_earned, 'customer_points': customer_points})
