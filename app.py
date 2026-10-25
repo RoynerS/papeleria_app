@@ -105,6 +105,7 @@ def init_db():
                 id BIGSERIAL PRIMARY KEY, description TEXT NOT NULL, category TEXT NOT NULL,
                 amount DOUBLE PRECISION NOT NULL, quantity INTEGER DEFAULT 1,
                 unit_price DOUBLE PRECISION DEFAULT 0,
+                product_id BIGINT REFERENCES products(id),
                 date TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'America/Bogota'))''',
         ]
         for statement in statements:
@@ -113,6 +114,7 @@ def init_db():
         conn.execute('ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price DOUBLE PRECISION DEFAULT 0')
         conn.execute('ALTER TABLE expenses ADD COLUMN IF NOT EXISTS quantity INTEGER DEFAULT 1')
         conn.execute('ALTER TABLE expenses ADD COLUMN IF NOT EXISTS unit_price DOUBLE PRECISION DEFAULT 0')
+        conn.execute('ALTER TABLE expenses ADD COLUMN IF NOT EXISTS product_id BIGINT REFERENCES products(id)')
         conn.execute('ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS item_name TEXT')
     else:
         conn.execute('''
@@ -152,6 +154,7 @@ def init_db():
             amount REAL NOT NULL,
             quantity INTEGER DEFAULT 1,
             unit_price REAL DEFAULT 0,
+            product_id INTEGER,
             date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
@@ -160,6 +163,7 @@ def init_db():
             'ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0',
             'ALTER TABLE expenses ADD COLUMN quantity INTEGER DEFAULT 1',
             'ALTER TABLE expenses ADD COLUMN unit_price REAL DEFAULT 0',
+            'ALTER TABLE expenses ADD COLUMN product_id INTEGER',
             'ALTER TABLE sale_items ADD COLUMN item_name TEXT',
         ]:
             try:
@@ -278,10 +282,25 @@ def add_product():
 
     conn = get_db_connection()
     try:
-        conn.execute(
-            'INSERT INTO products (name, barcode, cost_price, price, stock) VALUES (?,?,?,?,?)',
-            (name, barcode, cost_price, price, stock))
+        if app.config['DATABASE_URL']:
+            product_id = conn.execute(
+                'INSERT INTO products (name, barcode, cost_price, price, stock) VALUES (?,?,?,?,?) RETURNING id',
+                (name, barcode, cost_price, price, stock)).fetchone()['id']
+        else:
+            cursor = conn.execute(
+                'INSERT INTO products (name, barcode, cost_price, price, stock) VALUES (?,?,?,?,?)',
+                (name, barcode, cost_price, price, stock))
+            product_id = cursor.lastrowid
+        if stock > 0 and cost_price > 0:
+            conn.execute(
+                "INSERT INTO expenses (description, category, amount, quantity, unit_price, product_id) VALUES (?,?,?,?,?,?)",
+                (f'Compra inicial de inventario: {name}', 'Mercancía / Restock', stock * cost_price,
+                 stock, cost_price, product_id))
         conn.commit()
+        if stock > 0 and cost_price > 0:
+            flash('Producto creado y compra inicial registrada en Finanzas.', 'success')
+        elif stock > 0:
+            flash('Producto creado. No se registró gasto inicial porque falta el precio de compra.', 'warning')
     except Exception as error:
         if not is_unique_violation(error):
             raise
@@ -318,6 +337,7 @@ def edit_product(product_id):
 def delete_product(product_id):
     conn = get_db_connection()
     conn.execute('UPDATE sale_items SET product_id=NULL WHERE product_id=?', (product_id,))
+    conn.execute('UPDATE expenses SET product_id=NULL WHERE product_id=?', (product_id,))
     conn.execute('DELETE FROM products WHERE id=?', (product_id,))
     conn.commit()
     conn.close()
@@ -329,16 +349,45 @@ def delete_product(product_id):
 def add_expense():
     description = request.form['description'].strip()
     category    = request.form.get('category', 'General').strip()
-    amount      = float(request.form.get('amount', 0) or 0)
-    quantity    = int(request.form.get('quantity', 1) or 1)
-    unit_price  = float(request.form.get('unit_price', 0) or 0)
+    try:
+        quantity   = int(request.form.get('quantity', 1) or 1)
+        unit_price = float(request.form.get('unit_price', 0) or 0)
+        if category == 'Mercancía / Restock':
+            product_id = int(request.form.get('product_id', 0) or 0)
+            if product_id <= 0 or quantity <= 0 or unit_price <= 0:
+                flash('Selecciona un producto e ingresa cantidad y costo unitario válidos.', 'error')
+                return redirect(url_for('finance'))
+            amount = quantity * unit_price
+        else:
+            product_id = None
+            amount = float(request.form.get('amount', 0) or 0)
+    except (TypeError, ValueError):
+        flash('Revisa los valores del egreso e inténtalo de nuevo.', 'error')
+        return redirect(url_for('finance'))
 
     conn = get_db_connection()
-    conn.execute(
-        'INSERT INTO expenses (description, category, amount, quantity, unit_price) VALUES (?,?,?,?,?)',
-        (description, category, amount, quantity, unit_price))
-    conn.commit()
-    conn.close()
+    try:
+        if product_id:
+            product = conn.execute('SELECT stock, cost_price FROM products WHERE id=?', (product_id,)).fetchone()
+            if not product:
+                flash('El producto seleccionado ya no existe.', 'error')
+                return redirect(url_for('finance'))
+            new_stock = product['stock'] + quantity
+            if product['cost_price'] and new_stock > 0:
+                weighted_cost = ((product['stock'] * product['cost_price']) + (quantity * unit_price)) / new_stock
+            else:
+                weighted_cost = unit_price
+            conn.execute('UPDATE products SET stock=?, cost_price=? WHERE id=?',
+                         (new_stock, weighted_cost, product_id))
+        conn.execute(
+            'INSERT INTO expenses (description, category, amount, quantity, unit_price, product_id) VALUES (?,?,?,?,?,?)',
+            (description, category, amount, quantity, unit_price, product_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     return redirect(url_for('finance'))
 
 @app.route('/edit_expense/<int:expense_id>', methods=['POST'])
@@ -350,19 +399,81 @@ def edit_expense(expense_id):
     unit_price  = float(request.form.get('unit_price', 0) or 0)
 
     conn = get_db_connection()
-    conn.execute(
-        'UPDATE expenses SET description=?, category=?, amount=?, quantity=?, unit_price=? WHERE id=?',
-        (description, category, amount, quantity, unit_price, expense_id))
-    conn.commit()
-    conn.close()
+    try:
+        current = conn.execute('SELECT * FROM expenses WHERE id=?', (expense_id,)).fetchone()
+        if not current:
+            flash('No se encontró el egreso.', 'error')
+            return redirect(url_for('finance'))
+        old_restock = current['category'] == 'Mercancía / Restock' and current['product_id']
+        new_restock = category == 'Mercancía / Restock'
+        old_product_id = current['product_id']
+        new_product_id = int(request.form.get('product_id', 0) or 0) if new_restock else None
+        if new_restock:
+            quantity = int(request.form.get('quantity', 1) or 1)
+            unit_price = float(request.form.get('unit_price', 0) or 0)
+            if new_product_id <= 0 or quantity <= 0 or unit_price <= 0:
+                flash('Para un restock, selecciona producto, cantidad y costo unitario válidos.', 'error')
+                return redirect(url_for('finance'))
+            amount = quantity * unit_price
+
+        same_restock = old_restock and new_restock and old_product_id == new_product_id
+        if old_restock and not same_restock:
+            old_product = conn.execute('SELECT stock FROM products WHERE id=?', (old_product_id,)).fetchone()
+            old_quantity = current['quantity'] or 1
+            if not old_product or old_product['stock'] < old_quantity:
+                flash('No se puede cambiar este restock: parte de ese inventario ya se vendió.', 'error')
+                return redirect(url_for('finance'))
+            conn.execute('UPDATE products SET stock=stock-? WHERE id=?', (old_quantity, old_product_id))
+        if new_restock:
+            new_product = conn.execute('SELECT stock, cost_price FROM products WHERE id=?', (new_product_id,)).fetchone()
+            if not new_product:
+                flash('El producto seleccionado ya no existe.', 'error')
+                return redirect(url_for('finance'))
+            if same_restock:
+                old_quantity = current['quantity'] or 1
+                other_stock = new_product['stock'] - old_quantity
+                if other_stock < 0:
+                    flash('No se puede ajustar este restock: parte de ese inventario ya se vendió.', 'error')
+                    return redirect(url_for('finance'))
+                stock_after = other_stock + quantity
+                old_unit_cost = current['unit_price'] or 0
+                other_value = max(0, new_product['stock'] * (new_product['cost_price'] or 0) - old_quantity * old_unit_cost)
+                weighted_cost = (other_value + quantity * unit_price) / stock_after if stock_after else unit_price
+            else:
+                stock_after = new_product['stock'] + quantity
+                weighted_cost = ((new_product['stock'] * (new_product['cost_price'] or 0)) + quantity * unit_price) / stock_after if stock_after else unit_price
+            conn.execute('UPDATE products SET stock=?, cost_price=? WHERE id=?',
+                         (stock_after, weighted_cost, new_product_id))
+        conn.execute(
+            'UPDATE expenses SET description=?, category=?, amount=?, quantity=?, unit_price=?, product_id=? WHERE id=?',
+            (description, category, amount, quantity, unit_price, new_product_id, expense_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     return redirect(url_for('finance'))
 
 @app.route('/delete_expense/<int:expense_id>', methods=['POST'])
 def delete_expense(expense_id):
     conn = get_db_connection()
-    conn.execute('DELETE FROM expenses WHERE id=?', (expense_id,))
-    conn.commit()
-    conn.close()
+    try:
+        expense = conn.execute('SELECT category, quantity, product_id FROM expenses WHERE id=?', (expense_id,)).fetchone()
+        if expense and expense['category'] == 'Mercancía / Restock' and expense['product_id']:
+            qty = expense['quantity'] or 1
+            product = conn.execute('SELECT stock FROM products WHERE id=?', (expense['product_id'],)).fetchone()
+            if not product or product['stock'] < qty:
+                flash('No se puede eliminar este restock: parte de ese inventario ya se vendió.', 'error')
+                return redirect(url_for('finance'))
+            conn.execute('UPDATE products SET stock=stock-? WHERE id=?', (qty, expense['product_id']))
+        conn.execute('DELETE FROM expenses WHERE id=?', (expense_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     return redirect(url_for('finance'))
 
 # ─── CRUD VENTAS ───────────────────────────────────────────────────────────

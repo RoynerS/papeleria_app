@@ -925,6 +925,21 @@ a { text-decoration: none; }
     #cart-container { min-height: 150px !important; max-height: 280px !important; }
 }
 
+/* Aprovecha monitores Full HD y superiores sin estirar el contenido en móvil. */
+@media (min-width: 1600px) {
+    .content-wrapper {
+        width: 100%;
+        max-width: none;
+        padding: 2rem clamp(2rem, 2.25vw, 3rem);
+    }
+
+    .glass-panel-header { padding-inline: 1.75rem; }
+    .glass-panel-body { padding: 1.75rem; }
+    .table-modern thead th,
+    .table-modern tbody td { padding-inline: 18px; }
+    .product-card-modern { padding: 1.15rem; }
+}
+
 @media print {
     body * { visibility: hidden !important; }
     #thermal-ticket-container, #thermal-ticket-container * { visibility: visible !important; display: block !important; }

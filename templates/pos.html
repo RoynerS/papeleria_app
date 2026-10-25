@@ -82,7 +82,7 @@
                         placeholder="Filtrar catálogo por nombre o código..." onkeyup="filterProducts()">
                 </div>
 
-                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3" id="products-grid">
+                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-xxl-4 g-3" id="products-grid">
                     {% for p in products %}
                     <div class="col product-item" data-name="{{ p.name | lower }}"
                         data-barcode="{{ (p.barcode or '') | lower }}">

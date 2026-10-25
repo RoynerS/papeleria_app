@@ -5,7 +5,7 @@
 <div class="page-header mb-4">
     <div>
         <h1 class="page-title"><i class="bi bi-graph-up-arrow text-primary"></i> Finanzas</h1>
-        <p class="page-subtitle">Resumen de ingresos, gastos y balance</p>
+        <p class="page-subtitle">Las compras de inventario y los demás egresos se reflejan en el balance.</p>
     </div>
     <button class="btn-action btn-action-danger" data-bs-toggle="modal" data-bs-target="#modalAddExpense">
         <i class="bi bi-plus-lg"></i> Registrar Egreso
@@ -151,7 +151,7 @@
                                 <td class="text-center">
                                     <div class="action-btns">
                                         <button class="action-btn action-btn-edit" title="Editar"
-                                            onclick="openEditExpense({{ e.id }}, '{{ e.description|replace("'","\\'")|e }}', '{{ e.category|e }}', {{ e.amount }}, {{ e.quantity or 1 }}, {{ e.unit_price or 0 }})">
+                                            onclick="openEditExpense({{ e.id }}, '{{ e.description|replace("'","\\'")|e }}', '{{ e.category|e }}', {{ e.amount }}, {{ e.quantity or 1 }}, {{ e.unit_price or 0 }}, {{ e.product_id or 0 }})">
                                             <i class="bi bi-pencil-fill"></i>
                                         </button>
                                         <button class="action-btn action-btn-delete" title="Eliminar"
@@ -201,6 +201,7 @@
                 <input type="hidden" name="category" id="exp-category" value="General">
                 <input type="hidden" name="quantity" id="exp-qty-hidden" value="1">
                 <input type="hidden" name="unit_price" id="exp-uprice-hidden" value="0">
+                <input type="hidden" name="product_id" id="exp-product-id" value="">
 
                 <div class="modal-body-modern">
                     <!-- Selector producto (solo Restock) -->
@@ -211,7 +212,7 @@
                             {% for p in all_products %}
                             <option value="{{ p.id }}"
                                 data-name="{{ p.name }}"
-                                data-price="{{ p.cost_price if p.cost_price and p.cost_price > 0 else p.price }}"
+                                data-price="{{ p.cost_price if p.cost_price and p.cost_price > 0 else '' }}"
                                 data-stock="{{ p.stock }}">
                                 {{ p.name }}
                                 {% if p.cost_price and p.cost_price > 0 %}— costo ${{ "{:,.0f}".format(p.cost_price) }}{% endif %}
@@ -303,12 +304,21 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label-modern">Categoría</label>
-                        <select name="category" id="edit-exp-cat" class="form-control-modern">
+                        <select name="category" id="edit-exp-cat" class="form-control-modern" onchange="toggleEditRestockFields()">
                             <option value="Mercancía / Restock">Mercancía / Restock</option>
                             <option value="Servicios (Luz / Internet)">Servicios (Luz / Internet)</option>
                             <option value="Mantenimiento Máquinas">Mantenimiento Máquinas</option>
                             <option value="Salarios / Pagos">Salarios / Pagos</option>
                             <option value="Otros Gastos">Otros Gastos</option>
+                        </select>
+                    </div>
+                    <div id="edit-restock-product-wrap" class="mb-3" style="display:none;">
+                        <label class="form-label-modern">Producto del inventario</label>
+                        <select name="product_id" id="edit-exp-product" class="form-control-modern">
+                            <option value="">— Seleccionar producto —</option>
+                            {% for p in all_products %}
+                            <option value="{{ p.id }}">{{ p.name }} (stock: {{ p.stock }})</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <div class="row g-2 mb-3">
@@ -405,19 +415,29 @@ function switchExpenseType(type) {
     document.getElementById('exp-amount-direct').required = !isRestock;
 
     const catInput = document.getElementById('exp-category');
+    const restockProduct = document.getElementById('exp-product-id');
     if (isRestock) {
         catInput.value = 'Mercancía / Restock';
     } else {
         catInput.value = document.getElementById('exp-cat-select').value;
+        restockProduct.value = '';
+        document.getElementById('exp-qty-hidden').value = 1;
+        document.getElementById('exp-uprice-hidden').value = 0;
     }
 }
 
 // ── Selector de producto en Restock ───────────────────────────────────────
 function onRestockProductSelect(sel) {
     const opt = sel.options[sel.selectedIndex];
-    if (!opt.value) return;
+    document.getElementById('exp-product-id').value = opt.value;
+    if (!opt.value) {
+        document.getElementById('exp-desc').value = '';
+        document.getElementById('restock-unit-price').value = '';
+        calcRestockTotal();
+        return;
+    }
     document.getElementById('exp-desc').value           = opt.dataset.name;
-    document.getElementById('restock-unit-price').value = opt.dataset.price;
+    document.getElementById('restock-unit-price').value = opt.dataset.price || '';
     calcRestockTotal();
     document.getElementById('restock-qty').focus();
 }
@@ -449,7 +469,7 @@ document.getElementById('addExpenseForm').addEventListener('submit', function(e)
 });
 
 // ── Editar gasto ──────────────────────────────────────────────────────────
-function openEditExpense(id, desc, cat, amount, qty, uprice) {
+function openEditExpense(id, desc, cat, amount, qty, uprice, productId) {
     document.getElementById('editExpenseForm').action = `/edit_expense/${id}`;
     document.getElementById('edit-exp-desc').value    = desc;
     document.getElementById('edit-exp-amount').value  = amount;
@@ -458,8 +478,15 @@ function openEditExpense(id, desc, cat, amount, qty, uprice) {
 
     const sel = document.getElementById('edit-exp-cat');
     for (let o of sel.options) { if (o.value === cat) { sel.value = cat; break; } }
+    document.getElementById('edit-exp-product').value = productId || '';
+    toggleEditRestockFields();
 
     new bootstrap.Modal(document.getElementById('modalEditExpense')).show();
+}
+
+function toggleEditRestockFields() {
+    const isRestock = document.getElementById('edit-exp-cat').value === 'Mercancía / Restock';
+    document.getElementById('edit-restock-product-wrap').style.display = isRestock ? '' : 'none';
 }
 
 function calcEditExpense() {

@@ -24,7 +24,9 @@ Para usar una clave de sesión propia, define `FLASK_SECRET_KEY` y `ADMIN_PASSWO
 
 - Punto de venta con lector de código de barras y servicios rápidos
 - Inventario de productos, precios y existencias
-- Registro de ventas y gastos
+- Registro automático del costo del stock inicial al crear productos con precio de compra
+- Reposición desde Finanzas, que registra el egreso y aumenta las existencias
+- Registro de ventas y gastos operativos
 - Resumen financiero
 
 ## Nota
