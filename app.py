@@ -10,11 +10,11 @@ app.config['DATABASE_URL'] = (os.environ.get('DATABASE_URL') or os.environ.get('
 IS_VERCEL = os.environ.get('VERCEL') == '1'
 DB_NAME = Path(__file__).with_name('papeleria.db')
 QUICK_SERVICES = {
-    'Fotocopia B/N': 1.50,
-    'Fotocopia Color': 5.00,
-    'Impresión Documento': 3.00,
-    'Hojas Blancas (5 un)': 2.00,
-    'Escaneo / Trámite': 10.00,
+    'Fotocopia B/N': 1500,
+    'Fotocopia Color': 5000,
+    'Impresión Documento': 3000,
+    'Hojas Blancas (5 un)': 2000,
+    'Escaneo / Trámite': 10000,
 }
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,

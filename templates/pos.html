@@ -55,22 +55,22 @@
                             Papelería</span>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
-                        <button class="quick-btn" onclick="addQuickService('Fotocopia B/N', 1.50)">
-                            <i class="bi bi-file-earmark-text"></i> Fotocopia B/N <span class="quick-price">$1.50</span>
+                        <button type="button" class="quick-btn" onclick="addQuickService('Fotocopia B/N', 1500)">
+                            <i class="bi bi-file-earmark-text"></i> Fotocopia B/N <span class="quick-price">$1.500 COP</span>
                         </button>
-                        <button class="quick-btn" onclick="addQuickService('Fotocopia Color', 5.00)">
+                        <button type="button" class="quick-btn" onclick="addQuickService('Fotocopia Color', 5000)">
                             <i class="bi bi-file-earmark-richtext text-warning"></i> Copia Color <span
-                                class="quick-price">$5.00</span>
+                                class="quick-price">$5.000 COP</span>
                         </button>
-                        <button class="quick-btn" onclick="addQuickService('Impresión Documento', 3.00)">
-                            <i class="bi bi-printer"></i> Impresión <span class="quick-price">$3.00</span>
+                        <button type="button" class="quick-btn" onclick="addQuickService('Impresión Documento', 3000)">
+                            <i class="bi bi-printer"></i> Impresión <span class="quick-price">$3.000 COP</span>
                         </button>
-                        <button class="quick-btn" onclick="addQuickService('Hojas Blancas (5 un)', 2.00)">
-                            <i class="bi bi-files text-info"></i> 5 Hojas Blancas <span class="quick-price">$2.00</span>
+                        <button type="button" class="quick-btn" onclick="addQuickService('Hojas Blancas (5 un)', 2000)">
+                            <i class="bi bi-files text-info"></i> 5 Hojas Blancas <span class="quick-price">$2.000 COP</span>
                         </button>
-                        <button class="quick-btn" onclick="addQuickService('Escaneo / Trámite', 10.00)">
+                        <button type="button" class="quick-btn" onclick="addQuickService('Escaneo / Trámite', 10000)">
                             <i class="bi bi-qr-code-scan text-success"></i> Escaneo <span
-                                class="quick-price">$10.00</span>
+                                class="quick-price">$10.000 COP</span>
                         </button>
                     </div>
                 </div>
@@ -101,7 +101,7 @@
                                     <i class="bi bi-upc"></i> Sin código
                                 </div>
                                 {% endif %}
-                                <div class="product-price">${{ "%.2f"|format(p.price) }}</div>
+                                <div class="product-price">${{ "{:,.0f}".format(p.price) }} COP</div>
                             </div>
                             <div>
                                 <div class="d-flex justify-content-center">
@@ -113,7 +113,7 @@
                                         p.stock }} disp.</span>
                                     {% endif %}
                                 </div>
-                                <button class="btn-modern-primary"
+                                <button type="button" class="btn-modern-primary"
                                     onclick='addToCart({{ p.id }}, {{ p.name | tojson }}, {{ p.price }}, {{ p.stock }})'>
                                     <i class="bi bi-plus-lg"></i> Agregar al carrito
                                 </button>
@@ -180,7 +180,7 @@
                         </div>
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="fw-bold text-white fs-5">Total a Pagar:</span>
-                            <span id="cart-total" class="fs-3 fw-bolder text-success">$0.00</span>
+                            <span id="cart-total" class="fs-3 fw-bolder text-success">$0 COP</span>
                         </div>
                     </div>
 
@@ -209,15 +209,15 @@
                 <div class="text-center p-3 rounded-3 mb-4"
                     style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass);">
                     <span class="text-secondary text-uppercase small fw-bold tracking-wide">Total a Cobrar</span>
-                    <div class="display-5 fw-bold text-success my-1" id="modal-total-display">$0.00</div>
+                    <div class="display-5 fw-bold text-success my-1" id="modal-total-display">$0 COP</div>
                     <small class="text-muted" id="modal-items-summary">0 artículos</small>
                 </div>
 
                 <!-- Monto Recibido -->
                 <div class="mb-3">
-                    <label class="form-label-modern">Paga con / Efectivo Recibido ($)</label>
-                    <input type="number" step="0.5" id="cash-received-input"
-                        class="form-control-modern fs-3 fw-bold text-white text-center" placeholder="0.00"
+                    <label class="form-label-modern">Paga con / Efectivo Recibido (COP)</label>
+                    <input type="number" step="1" min="0" id="cash-received-input"
+                        class="form-control-modern fs-3 fw-bold text-white text-center" placeholder="0"
                         oninput="calculateChange()">
                 </div>
 
@@ -226,13 +226,13 @@
                     <label class="form-label-modern mb-2" style="font-size: 0.72rem;">Billetes Frecuentes</label>
                     <div class="row g-2">
                         <div class="col-3"><button type="button" class="btn bill-preset-btn w-100"
-                                onclick="setCashAmount(50)">$50</button></div>
+                                onclick="setCashAmount(50000)">$50.000</button></div>
                         <div class="col-3"><button type="button" class="btn bill-preset-btn w-100"
-                                onclick="setCashAmount(100)">$100</button></div>
+                                onclick="setCashAmount(100000)">$100.000</button></div>
                         <div class="col-3"><button type="button" class="btn bill-preset-btn w-100"
-                                onclick="setCashAmount(200)">$200</button></div>
+                                onclick="setCashAmount(200000)">$200.000</button></div>
                         <div class="col-3"><button type="button" class="btn bill-preset-btn w-100"
-                                onclick="setCashAmount(500)">$500</button></div>
+                                onclick="setCashAmount(500000)">$500.000</button></div>
                     </div>
                     <div class="mt-2">
                         <button type="button" class="btn btn-sm btn-outline-secondary w-100 py-1"
@@ -279,15 +279,15 @@
     </div>
     <div style="font-size: 13px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 4px;">
         <span>TOTAL:</span>
-        <span id="ticket-total">$0.00</span>
+        <span id="ticket-total">$0 COP</span>
     </div>
     <div style="font-size: 11px; display: flex; justify-content: space-between;">
         <span>PAGADO CON:</span>
-        <span id="ticket-paid">$0.00</span>
+        <span id="ticket-paid">$0 COP</span>
     </div>
     <div style="font-size: 11px; display: flex; justify-content: space-between; margin-bottom: 10px;">
         <span>CAMBIO:</span>
-        <span id="ticket-change">$0.00</span>
+        <span id="ticket-change">$0 COP</span>
     </div>
     <div style="text-align: center; font-size: 11px;">
         ¡GRACIAS POR SU COMPRA!<br>Vuelva pronto.
@@ -301,6 +301,9 @@
     let heldSales = [];
     let checkoutModalInstance = null;
     let audioCtx = null;
+    const formatCOP = value => new Intl.NumberFormat('es-CO', {
+        style: 'currency', currency: 'COP', maximumFractionDigits: 0
+    }).format(Number(value) || 0);
 
     const availableProducts = [
         {% for p in products %}
@@ -550,7 +553,7 @@
             row.innerHTML = `
                 <div style="flex: 1; min-width: 0; padding-right: 10px;">
                     <div class="fw-semibold text-truncate text-white" title="${item.name}">${item.name}</div>
-                    <div class="small text-muted">$${item.price.toFixed(2)} c/u</div>
+                    <div class="small text-muted">${formatCOP(item.price)} c/u</div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <div class="d-flex align-items-center rounded-pill px-2 py-1" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass);">
@@ -563,7 +566,7 @@
                         </button>
                     </div>
                     <div class="text-end fw-bold text-success" style="min-width: 60px;">
-                        $${itemTotal.toFixed(2)}
+                        ${formatCOP(itemTotal)}
                     </div>
                     <button class="btn btn-sm btn-link text-danger p-0" onclick="removeFromCart(${item.id})" title="Quitar">
                         <i class="bi bi-x-circle fs-6"></i>
@@ -573,7 +576,7 @@
             cartList.appendChild(row);
         });
 
-        totalEl.textContent = `$${total.toFixed(2)}`;
+        totalEl.textContent = formatCOP(total);
         countEl.textContent = count;
         checkoutBtn.disabled = cart.length === 0;
     }
@@ -592,7 +595,7 @@
     function openCheckoutModal() {
         if (cart.length === 0) return;
         const total = getCartTotal();
-        document.getElementById('modal-total-display').textContent = `$${total.toFixed(2)}`;
+        document.getElementById('modal-total-display').textContent = formatCOP(total);
         document.getElementById('modal-items-summary').textContent = `${cart.reduce((a, b) => a + b.quantity, 0)} artículos en orden`;
 
         const cashInput = document.getElementById('cash-received-input');
@@ -609,7 +612,7 @@
 
     function setExactAmount() {
         const total = getCartTotal();
-        document.getElementById('cash-received-input').value = total.toFixed(2);
+        document.getElementById('cash-received-input').value = Math.ceil(total);
         calculateChange();
     }
 
@@ -623,13 +626,13 @@
         const change = cash - total;
 
         if (cash >= total) {
-            changeEl.textContent = `$${change.toFixed(2)}`;
+            changeEl.textContent = formatCOP(change);
             changeEl.className = 'display-6 fw-bold text-success my-1';
             changeBox.style.borderColor = 'rgba(16, 185, 129, 0.4)';
             confirmBtn.disabled = false;
         } else {
             const missing = total - cash;
-            changeEl.textContent = `Faltan: $${missing.toFixed(2)}`;
+            changeEl.textContent = `Faltan: ${formatCOP(missing)}`;
             changeEl.className = 'display-6 fw-bold text-danger my-1';
             changeBox.style.borderColor = 'rgba(239, 68, 68, 0.4)';
             confirmBtn.disabled = true;
@@ -692,9 +695,9 @@
 
     function fillTicketData(paid, change) {
         document.getElementById('ticket-date').textContent = new Date().toLocaleString();
-        document.getElementById('ticket-total').textContent = `$${getCartTotal().toFixed(2)}`;
-        document.getElementById('ticket-paid').textContent = `$${paid.toFixed(2)}`;
-        document.getElementById('ticket-change').textContent = `$${change.toFixed(2)}`;
+        document.getElementById('ticket-total').textContent = formatCOP(getCartTotal());
+        document.getElementById('ticket-paid').textContent = formatCOP(paid);
+        document.getElementById('ticket-change').textContent = formatCOP(change);
 
         const list = document.getElementById('ticket-items-list');
         list.innerHTML = '';
@@ -706,7 +709,7 @@
             line.style.margin = '2px 0';
             line.innerHTML = `
                 <span>${item.quantity}x ${item.name.substring(0, 18)}</span>
-                <span>$${(item.price * item.quantity).toFixed(2)}</span>
+                <span>${formatCOP(item.price * item.quantity)}</span>
             `;
             list.appendChild(line);
         });
