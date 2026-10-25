@@ -114,7 +114,7 @@
                                     {% endif %}
                                 </div>
                                 <button class="btn-modern-primary"
-                                    onclick="addToCart({{ p.id }}, '{{ p.name }}', {{ p.price }}, {{ p.stock }})">
+                                    onclick='addToCart({{ p.id }}, {{ p.name | tojson }}, {{ p.price }}, {{ p.stock }})'>
                                     <i class="bi bi-plus-lg"></i> Agregar al carrito
                                 </button>
                             </div>
@@ -242,6 +242,13 @@
                     </div>
                 </div>
 
+                <div class="mb-3">
+                    <label for="customer-national-id" class="form-label-modern">Cédula del cliente (opcional)</label>
+                    <input type="text" id="customer-national-id" class="form-control-modern" inputmode="numeric"
+                        autocomplete="off" maxlength="15" placeholder="Número de cédula">
+                    <small class="text-muted">Acumula 1 punto por cada $1.000 COP para beneficios futuros.</small>
+                </div>
+
                 <!-- Caja de Cambio Calculado -->
                 <div class="p-3 rounded-3 text-center" id="change-box"
                     style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25);">
@@ -298,11 +305,11 @@
     const availableProducts = [
         {% for p in products %}
     {
-        id: { { p.id } },
-        name: { { p.name | tojson } },
-        barcode: { { (p.barcode or '') | tojson } },
-        price: { { p.price } },
-        stock: { { p.stock } }
+        id: {{ p.id }},
+        name: {{ p.name | tojson }},
+        barcode: {{ (p.barcode or '') | tojson }},
+        price: {{ p.price }},
+        stock: {{ p.stock }}
     },
     {% endfor %}
     ];
@@ -435,6 +442,10 @@
 
     function addToCart(id, name, price, maxStock) {
         playBeep(1300, 0.05);
+        if (maxStock <= 0) {
+            showScanFeedback('✗ Producto agotado', true);
+            return;
+        }
         let item = cart.find(i => i.id === id);
         if (item) {
             if (item.quantity >= maxStock) {
@@ -621,7 +632,7 @@
             changeEl.textContent = `Faltan: $${missing.toFixed(2)}`;
             changeEl.className = 'display-6 fw-bold text-danger my-1';
             changeBox.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-            confirmBtn.disabled = cash > 0; // Permitir confirmar si está vacío (pago exacto implícito)
+            confirmBtn.disabled = true;
         }
     }
 
@@ -644,7 +655,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
                 },
-                body: JSON.stringify({ cart })
+                body: JSON.stringify({ cart, customer_id: document.getElementById('customer-national-id').value.trim() })
             });
             const data = await response.json();
 
@@ -654,11 +665,17 @@
                 checkoutModalInstance.hide();
                 playBeep(1600, 0.2);
 
+                const loyaltyMessage = data.customer_points !== null
+                    ? `Venta registrada. Ganaste ${data.points_earned} puntos y tienes ${data.customer_points} puntos acumulados.`
+                    : 'Venta registrada.';
+                alert(loyaltyMessage);
+
                 if (confirm('¿Deseas imprimir el ticket de venta?')) {
                     window.print();
                 }
 
                 cart = [];
+                document.getElementById('customer-national-id').value = '';
                 renderCart();
                 window.location.reload();
             } else {

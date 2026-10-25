@@ -90,12 +90,16 @@ def init_db():
     conn = get_db_connection()
     if app.config['DATABASE_URL']:
         statements = [
+            '''CREATE TABLE IF NOT EXISTS customers (
+                national_id TEXT PRIMARY KEY, points INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'America/Bogota'))''',
             '''CREATE TABLE IF NOT EXISTS products (
                 id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, barcode TEXT UNIQUE,
                 cost_price DOUBLE PRECISION DEFAULT 0, price DOUBLE PRECISION NOT NULL,
                 stock INTEGER NOT NULL DEFAULT 0)''',
             '''CREATE TABLE IF NOT EXISTS sales (
                 id BIGSERIAL PRIMARY KEY, total DOUBLE PRECISION NOT NULL,
+                customer_id TEXT REFERENCES customers(national_id), points_earned INTEGER NOT NULL DEFAULT 0,
                 date TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'America/Bogota'))''',
             '''CREATE TABLE IF NOT EXISTS sale_items (
                 id BIGSERIAL PRIMARY KEY, sale_id BIGINT REFERENCES sales(id),
@@ -116,7 +120,16 @@ def init_db():
         conn.execute('ALTER TABLE expenses ADD COLUMN IF NOT EXISTS unit_price DOUBLE PRECISION DEFAULT 0')
         conn.execute('ALTER TABLE expenses ADD COLUMN IF NOT EXISTS product_id BIGINT REFERENCES products(id)')
         conn.execute('ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS item_name TEXT')
+        conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_id TEXT REFERENCES customers(national_id)')
+        conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0')
     else:
+        conn.execute('''
+        CREATE TABLE IF NOT EXISTS customers (
+            national_id TEXT PRIMARY KEY,
+            points INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
         conn.execute('''
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,6 +144,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS sales (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             total REAL NOT NULL,
+            customer_id TEXT,
+            points_earned INTEGER NOT NULL DEFAULT 0,
             date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
@@ -165,6 +180,8 @@ def init_db():
             'ALTER TABLE expenses ADD COLUMN unit_price REAL DEFAULT 0',
             'ALTER TABLE expenses ADD COLUMN product_id INTEGER',
             'ALTER TABLE sale_items ADD COLUMN item_name TEXT',
+            'ALTER TABLE sales ADD COLUMN customer_id TEXT',
+            'ALTER TABLE sales ADD COLUMN points_earned INTEGER NOT NULL DEFAULT 0',
         ]:
             try:
                 conn.execute(migration)
@@ -512,6 +529,10 @@ def checkout():
     if not isinstance(cart, list) or not cart:
         return jsonify({'success': False, 'error': 'Carrito vacío o inválido'}), 400
 
+    customer_id = str(data.get('customer_id') or '').strip()
+    if customer_id and (not customer_id.isdigit() or not 6 <= len(customer_id) <= 15):
+        return jsonify({'success': False, 'error': 'La cédula debe tener entre 6 y 15 dígitos'}), 400
+
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -546,11 +567,22 @@ def checkout():
             total += float(product['price']) * quantity
             verified_items.append((product_id, quantity, float(product['price']), product['name']))
 
+        points_earned = int(total // 1000) if customer_id else 0
+        customer_points = None
+        if customer_id:
+            customer = conn.execute('SELECT points FROM customers WHERE national_id=?', (customer_id,)).fetchone()
+            if customer:
+                customer_points = int(customer['points']) + points_earned
+                conn.execute('UPDATE customers SET points=? WHERE national_id=?', (customer_points, customer_id))
+            else:
+                customer_points = points_earned
+                conn.execute('INSERT INTO customers (national_id, points) VALUES (?,?)', (customer_id, customer_points))
+
         if app.config['DATABASE_URL']:
-            cur.execute('INSERT INTO sales (total) VALUES (?) RETURNING id', (total,))
+            cur.execute('INSERT INTO sales (total, customer_id, points_earned) VALUES (?,?,?) RETURNING id', (total, customer_id or None, points_earned))
             sale_id = cur.fetchone()['id']
         else:
-            cur.execute('INSERT INTO sales (total) VALUES (?)', (total,))
+            cur.execute('INSERT INTO sales (total, customer_id, points_earned) VALUES (?,?,?)', (total, customer_id or None, points_earned))
             sale_id = cur.lastrowid
 
         for product_id, quantity, unit_price, item_name in verified_items:
@@ -564,7 +596,8 @@ def checkout():
                 'INSERT INTO sale_items (sale_id, product_id, quantity, price, item_name) VALUES (?,?,?,?,?)',
                 (sale_id, product_id, quantity, unit_price, item_name))
         conn.commit()
-        return jsonify({'success': True, 'sale_id': sale_id, 'total': total})
+        return jsonify({'success': True, 'sale_id': sale_id, 'total': total,
+                        'points_earned': points_earned, 'customer_points': customer_points})
     except Exception:
         conn.rollback()
         app.logger.exception('No se pudo completar la venta')
