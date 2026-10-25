@@ -1,0 +1,329 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<!-- ── PAGE HEADER ── -->
+<div class="page-header mb-4">
+    <div>
+        <h1 class="page-title"><i class="bi bi-boxes text-primary"></i> Inventario</h1>
+        <p class="page-subtitle">Gestión de productos y existencias</p>
+    </div>
+    <button class="btn-action btn-action-primary" data-bs-toggle="modal" data-bs-target="#modalAddProduct">
+        <i class="bi bi-plus-lg"></i> Nuevo Producto
+    </button>
+</div>
+
+<!-- ── STATS STRIP ── -->
+<div class="stats-strip mb-4">
+    <div class="stat-item">
+        <span class="stat-value">{{ products|length }}</span>
+        <span class="stat-label">Productos</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-value text-success">{{ products|selectattr('stock','gt',10)|list|length }}</span>
+        <span class="stat-label">En stock</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-value text-warning">{{ products|selectattr('stock','gt',0)|selectattr('stock','le',10)|list|length }}</span>
+        <span class="stat-label">Stock bajo</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-value text-danger">{{ products|selectattr('stock','eq',0)|list|length }}</span>
+        <span class="stat-label">Agotados</span>
+    </div>
+</div>
+
+<!-- ── TABLE ── -->
+<div class="glass-panel">
+    <div class="glass-panel-header">
+        <div class="glass-panel-title">
+            <i class="bi bi-archive-fill text-primary"></i> Control de Existencias
+        </div>
+        <div class="search-bar-modern mb-0" style="width:260px;">
+            <i class="bi bi-search"></i>
+            <input type="text" id="inventory-search" class="form-control-modern"
+                placeholder="Buscar producto..." onkeyup="filterInventory()" style="padding-left:38px;">
+        </div>
+    </div>
+    <div class="glass-panel-body p-0">
+        <div class="table-responsive">
+            <table class="table-modern" id="inventory-table">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Producto</th>
+                        <th>P. Compra</th>
+                        <th>P. Venta</th>
+                        <th>Margen</th>
+                        <th>Stock</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in products %}
+                    <tr class="inv-row"
+                        data-search="{{ p.name|lower }} {{ p.id }} {{ (p.barcode or '')|lower }}">
+                        <td>
+                            {% if p.barcode %}
+                            <span class="code-badge code-badge-primary"><i class="bi bi-upc"></i> {{ p.barcode }}</span>
+                            {% else %}
+                            <span class="code-badge">#{{ "%03d"|format(p.id) }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="fw-semibold">{{ p.name }}</td>
+                        <td>
+                            {% if p.cost_price and p.cost_price > 0 %}
+                            <span class="price-cost">${{ "{:,.0f}".format(p.cost_price) }}</span>
+                            {% else %}<span class="text-muted small">—</span>{% endif %}
+                        </td>
+                        <td>
+                            <span class="price-sale">${{ "{:,.0f}".format(p.price) }}</span>
+                        </td>
+                        <td>
+                            {% if p.cost_price and p.cost_price > 0 and p.price > 0 %}
+                                {% set m = ((p.price - p.cost_price) / p.price * 100)|round(1) %}
+                                <span class="margin-badge {{ 'margin-good' if m >= 20 else ('margin-low' if m >= 0 else 'margin-neg') }}">
+                                    {{ m }}%
+                                </span>
+                            {% else %}<span class="text-muted small">—</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if p.stock > 10 %}
+                            <span class="stock-tag in-stock"><i class="bi bi-check-circle-fill"></i> {{ p.stock }}</span>
+                            {% elif p.stock > 0 %}
+                            <span class="stock-tag low-stock"><i class="bi bi-exclamation-triangle-fill"></i> {{ p.stock }}</span>
+                            {% else %}
+                            <span class="stock-tag out-stock"><i class="bi bi-x-circle-fill"></i> Agotado</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <div class="action-btns">
+                                <button class="action-btn action-btn-edit" title="Editar"
+                                    onclick="openEditProduct({{ p.id }}, '{{ p.name|replace("'","\\'")|e }}', '{{ (p.barcode or '')|e }}', {{ p.cost_price or 0 }}, {{ p.price }}, {{ p.stock }})">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </button>
+                                <button class="action-btn action-btn-delete" title="Eliminar"
+                                    onclick="confirmDeleteProduct({{ p.id }}, '{{ p.name|replace("'","\\'")|e }}')">
+                                    <i class="bi bi-trash3-fill"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox display-4 d-block mb-3 opacity-25"></i>
+                            No hay productos registrados.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     MODAL: AGREGAR PRODUCTO
+═══════════════════════════════════════════ -->
+<div class="modal fade" id="modalAddProduct" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content modal-modern">
+            <div class="modal-header-modern">
+                <h5 class="modal-title-modern"><i class="bi bi-plus-circle-fill text-success"></i> Nuevo Producto</h5>
+                <button type="button" class="btn-close-modern" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <form action="{{ url_for('add_product') }}" method="POST">
+                <div class="modal-body-modern">
+                    <div class="mb-3">
+                        <label class="form-label-modern">Nombre del Producto *</label>
+                        <input type="text" name="name" class="form-control-modern" required
+                            placeholder="Ej. Cuaderno Profesional 100 Hojas">
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label-modern mb-0">Código de Barras</label>
+                            <button type="button" class="btn-link-modern" onclick="generateBarcode('add-barcode')">
+                                <i class="bi bi-magic"></i> Autogenerar
+                            </button>
+                        </div>
+                        <div class="input-icon-wrap">
+                            <i class="bi bi-upc input-icon"></i>
+                            <input type="text" name="barcode" id="add-barcode"
+                                class="form-control-modern ps-icon font-monospace"
+                                placeholder="Escanear o escribir (opcional)">
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label-modern">Precio de Compra (COP)</label>
+                            <input type="number" step="1" min="0" name="cost_price" id="add-cost"
+                                class="form-control-modern" placeholder="0" oninput="calcAddMargin()">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-modern">Precio de Venta (COP) *</label>
+                            <input type="number" step="1" min="1" name="price" id="add-sale"
+                                class="form-control-modern" required placeholder="0" oninput="calcAddMargin()">
+                        </div>
+                    </div>
+                    <div id="add-margin-box" class="margin-preview mb-3" style="display:none;">
+                        <span class="text-muted small">Margen:</span>
+                        <span id="add-margin-val" class="fw-bold ms-2"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-modern">Stock Inicial</label>
+                        <input type="number" min="0" name="stock" class="form-control-modern" required placeholder="0" value="0">
+                    </div>
+                </div>
+                <div class="modal-footer-modern">
+                    <button type="button" class="btn-action btn-action-ghost" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn-action btn-action-success">
+                        <i class="bi bi-cloud-arrow-up-fill"></i> Guardar Producto
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     MODAL: EDITAR PRODUCTO
+═══════════════════════════════════════════ -->
+<div class="modal fade" id="modalEditProduct" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content modal-modern">
+            <div class="modal-header-modern">
+                <h5 class="modal-title-modern"><i class="bi bi-pencil-fill text-primary"></i> Editar Producto</h5>
+                <button type="button" class="btn-close-modern" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <form id="editProductForm" method="POST">
+                <div class="modal-body-modern">
+                    <div class="mb-3">
+                        <label class="form-label-modern">Nombre del Producto *</label>
+                        <input type="text" name="name" id="edit-name" class="form-control-modern" required>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label-modern mb-0">Código de Barras</label>
+                            <button type="button" class="btn-link-modern" onclick="generateBarcode('edit-barcode')">
+                                <i class="bi bi-magic"></i> Autogenerar
+                            </button>
+                        </div>
+                        <div class="input-icon-wrap">
+                            <i class="bi bi-upc input-icon"></i>
+                            <input type="text" name="barcode" id="edit-barcode"
+                                class="form-control-modern ps-icon font-monospace">
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label-modern">Precio de Compra (COP)</label>
+                            <input type="number" step="1" min="0" name="cost_price" id="edit-cost"
+                                class="form-control-modern" oninput="calcEditMargin()">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-modern">Precio de Venta (COP) *</label>
+                            <input type="number" step="1" min="1" name="price" id="edit-sale"
+                                class="form-control-modern" required oninput="calcEditMargin()">
+                        </div>
+                    </div>
+                    <div id="edit-margin-box" class="margin-preview mb-3" style="display:none;">
+                        <span class="text-muted small">Margen:</span>
+                        <span id="edit-margin-val" class="fw-bold ms-2"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-modern">Stock actual</label>
+                        <input type="number" min="0" name="stock" id="edit-stock" class="form-control-modern" required>
+                    </div>
+                </div>
+                <div class="modal-footer-modern">
+                    <button type="button" class="btn-action btn-action-ghost" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn-action btn-action-primary">
+                        <i class="bi bi-check-lg"></i> Guardar Cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     MODAL: CONFIRMAR ELIMINAR PRODUCTO
+═══════════════════════════════════════════ -->
+<div class="modal fade" id="modalDeleteProduct" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content modal-modern">
+            <div class="modal-body-modern text-center py-4">
+                <div class="delete-icon-wrap mb-3">
+                    <i class="bi bi-exclamation-triangle-fill text-danger fs-1"></i>
+                </div>
+                <h6 class="fw-bold mb-1">¿Eliminar producto?</h6>
+                <p class="text-muted small mb-4" id="delete-product-name"></p>
+                <form id="deleteProductForm" method="POST">
+                    <div class="d-flex gap-2 justify-content-center">
+                        <button type="button" class="btn-action btn-action-ghost" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn-action btn-action-danger">
+                            <i class="bi bi-trash3-fill"></i> Eliminar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // ── Filtro de tabla ──────────────────────────────
+    function filterInventory() {
+        const q = document.getElementById('inventory-search').value.toLowerCase();
+        document.querySelectorAll('.inv-row').forEach(row => {
+            row.style.display = row.dataset.search.includes(q) ? '' : 'none';
+        });
+    }
+
+    // ── Código de barras ────────────────────────────
+    function generateBarcode(fieldId) {
+        document.getElementById(fieldId).value = '750' + Math.floor(1e8 + Math.random() * 9e8);
+    }
+
+    // ── Cálculo de margen ───────────────────────────
+    function calcMargin(costId, saleId, boxId, valId) {
+        const cost = parseFloat(document.getElementById(costId).value) || 0;
+        const sale = parseFloat(document.getElementById(saleId).value) || 0;
+        const box  = document.getElementById(boxId);
+        const val  = document.getElementById(valId);
+        if (cost > 0 && sale > 0) {
+            const pct = ((sale - cost) / sale * 100).toFixed(1);
+            const profit = (sale - cost).toLocaleString('es-CO');
+            val.textContent = `${pct}%  (+$${profit} por unidad)`;
+            val.style.color = pct >= 20 ? '#059669' : pct >= 0 ? '#d97706' : '#dc2626';
+            box.style.display = 'flex';
+        } else {
+            box.style.display = 'none';
+        }
+    }
+    const calcAddMargin  = () => calcMargin('add-cost','add-sale','add-margin-box','add-margin-val');
+    const calcEditMargin = () => calcMargin('edit-cost','edit-sale','edit-margin-box','edit-margin-val');
+
+    // ── Abrir modal editar ──────────────────────────
+    function openEditProduct(id, name, barcode, cost, price, stock) {
+        document.getElementById('editProductForm').action = `/edit_product/${id}`;
+        document.getElementById('edit-name').value   = name;
+        document.getElementById('edit-barcode').value = barcode;
+        document.getElementById('edit-cost').value   = cost;
+        document.getElementById('edit-sale').value   = price;
+        document.getElementById('edit-stock').value  = stock;
+        calcEditMargin();
+        new bootstrap.Modal(document.getElementById('modalEditProduct')).show();
+    }
+
+    // ── Confirmar eliminar ──────────────────────────
+    function confirmDeleteProduct(id, name) {
+        document.getElementById('deleteProductForm').action = `/delete_product/${id}`;
+        document.getElementById('delete-product-name').textContent = `"${name}"`;
+        new bootstrap.Modal(document.getElementById('modalDeleteProduct')).show();
+    }
+</script>
+{% endblock %}

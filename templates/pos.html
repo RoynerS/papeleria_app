@@ -1,0 +1,698 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-header mb-4 pos-page-header">
+    <div>
+        <h1 class="page-title"><i class="bi bi-shop text-primary"></i> Punto de Venta</h1>
+        <p class="page-subtitle">Escanea productos o selecciónalos para iniciar una venta.</p>
+    </div>
+    <div class="pos-open-status"><span class="pos-status-dot"></span> Caja lista para vender</div>
+</div>
+<div class="row g-4">
+    <!-- Catálogo de Productos, Acceso Rápido y Escáner -->
+    <div class="col-lg-8">
+        <div class="glass-panel h-100">
+            <div class="glass-panel-header">
+                <div class="glass-panel-title">
+                    <i class="bi bi-grid-fill text-primary"></i> Terminal de Venta
+                </div>
+                <!-- Barra de Atajos Rápidos -->
+                <div class="d-none d-md-flex align-items-center gap-2">
+                    <span class="text-muted small">Atajos:</span>
+                    <span class="shortcut-kbd">F2 Cobrar</span>
+                    <span class="shortcut-kbd">F4 Limpiar</span>
+                    <span class="shortcut-kbd">Ctrl+B Escáner</span>
+                </div>
+            </div>
+            <div class="glass-panel-body">
+                <!-- Barra de Escaneo Rápido con Pistola o Código -->
+                <div class="pos-scan-panel p-3 mb-3 rounded-3"
+                    style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25);">
+                    <form onsubmit="handleBarcodeScan(event)" class="d-flex gap-2">
+                        <div class="position-relative flex-grow-1">
+                            <i
+                                class="bi bi-upc-scan position-absolute top-50 start-0 translate-middle-y ms-3 text-primary fs-5"></i>
+                            <input type="text" id="barcode-input" class="form-control-modern ps-5"
+                                placeholder="Escanear con lector de barras o teclear código... (Ctrl + B)" autofocus
+                                autocomplete="off">
+                        </div>
+                        <button type="submit" class="btn-modern-primary w-auto px-4">
+                            <i class="bi bi-cart-plus-fill"></i> Escanear
+                        </button>
+                    </form>
+                    <div class="d-flex justify-content-between align-items-center mt-2 px-1">
+                        <small class="text-secondary" style="font-size: 0.78rem;">
+                            <i class="bi bi-volume-up text-primary me-1"></i> Confirmación sonora de escaneo habilitada.
+                        </small>
+                        <span id="scan-feedback" class="badge" style="display: none; transition: all 0.3s ease;"></span>
+                    </div>
+                </div>
+
+                <!-- Botones de Acceso Rápido (Servicios comunes de Papelería) -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="form-label-modern mb-0" style="font-size: 0.75rem;"><i
+                                class="bi bi-lightning-charge-fill text-warning me-1"></i> Servicios Rápidos de
+                            Papelería</span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="quick-btn" onclick="addQuickService('Fotocopia B/N', 1.50)">
+                            <i class="bi bi-file-earmark-text"></i> Fotocopia B/N <span class="quick-price">$1.50</span>
+                        </button>
+                        <button class="quick-btn" onclick="addQuickService('Fotocopia Color', 5.00)">
+                            <i class="bi bi-file-earmark-richtext text-warning"></i> Copia Color <span
+                                class="quick-price">$5.00</span>
+                        </button>
+                        <button class="quick-btn" onclick="addQuickService('Impresión Documento', 3.00)">
+                            <i class="bi bi-printer"></i> Impresión <span class="quick-price">$3.00</span>
+                        </button>
+                        <button class="quick-btn" onclick="addQuickService('Hojas Blancas (5 un)', 2.00)">
+                            <i class="bi bi-files text-info"></i> 5 Hojas Blancas <span class="quick-price">$2.00</span>
+                        </button>
+                        <button class="quick-btn" onclick="addQuickService('Escaneo / Trámite', 10.00)">
+                            <i class="bi bi-qr-code-scan text-success"></i> Escaneo <span
+                                class="quick-price">$10.00</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Buscador de texto tradicional -->
+                <div class="search-bar-modern mb-3">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="search-input" class="form-control-modern"
+                        placeholder="Filtrar catálogo por nombre o código..." onkeyup="filterProducts()">
+                </div>
+
+                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3" id="products-grid">
+                    {% for p in products %}
+                    <div class="col product-item" data-name="{{ p.name | lower }}"
+                        data-barcode="{{ (p.barcode or '') | lower }}">
+                        <div class="product-card-modern">
+                            <div>
+                                <div class="product-icon-wrap">
+                                    <i class="bi bi-tag-fill"></i>
+                                </div>
+                                <h6 class="product-title" title="{{ p.name }}">{{ p.name }}</h6>
+                                {% if p.barcode %}
+                                <div class="small text-muted mb-2 font-monospace">
+                                    <i class="bi bi-upc"></i> {{ p.barcode }}
+                                </div>
+                                {% else %}
+                                <div class="small text-muted mb-2 font-monospace opacity-50">
+                                    <i class="bi bi-upc"></i> Sin código
+                                </div>
+                                {% endif %}
+                                <div class="product-price">${{ "%.2f"|format(p.price) }}</div>
+                            </div>
+                            <div>
+                                <div class="d-flex justify-content-center">
+                                    {% if p.stock > 5 %}
+                                    <span class="stock-tag in-stock"><i class="bi bi-check2-circle"></i> Stock: {{
+                                        p.stock }}</span>
+                                    {% else %}
+                                    <span class="stock-tag low-stock"><i class="bi bi-exclamation-triangle"></i> Solo {{
+                                        p.stock }} disp.</span>
+                                    {% endif %}
+                                </div>
+                                <button class="btn-modern-primary"
+                                    onclick="addToCart({{ p.id }}, '{{ p.name }}', {{ p.price }}, {{ p.stock }})">
+                                    <i class="bi bi-plus-lg"></i> Agregar al carrito
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-12 py-5 text-center text-muted">
+                        <i class="bi bi-box-seam display-4 d-block mb-3 opacity-50"></i>
+                        <h5>No hay productos en catálogo</h5>
+                        <p class="small">Dirígete a la sección de inventario para dar de alta nuevos productos.</p>
+                        <a href="{{ url_for('inventory') }}" class="btn-modern-primary d-inline-flex w-auto mt-2 px-4">
+                            Ir a Inventario
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel del Carrito / Venta Actual -->
+    <div class="col-lg-4">
+        <div class="glass-panel sticky-top pos-cart-panel" style="top: 80px;">
+            <div class="glass-panel-header">
+                <div class="glass-panel-title">
+                    <i class="bi bi-receipt text-warning"></i> Orden Actual
+                </div>
+                <div class="d-flex gap-2">
+                    <!-- Botón Retener / Poner en espera -->
+                    <button class="btn btn-sm btn-outline-info border-0 p-1" onclick="toggleHoldSale()"
+                        title="Poner en espera (F7)" id="hold-sale-btn">
+                        <i class="bi bi-pause-circle"></i> <span id="hold-badge-text">En Espera (0)</span>
+                    </button>
+                    <!-- Botón Limpiar -->
+                    <button class="btn btn-sm btn-outline-danger border-0 p-1" onclick="clearCart()"
+                        title="Vaciar orden (F4)" id="clear-cart-btn" style="display: none;">
+                        <i class="bi bi-trash3"></i> Limpiar
+                    </button>
+                </div>
+            </div>
+
+            <div class="glass-panel-body p-0">
+                <div style="min-height: 240px; max-height: 360px; overflow-y: auto;" id="cart-container">
+                    <div id="cart-items">
+                        <!-- Items inyectados dinámicamente -->
+                    </div>
+                    <div id="empty-cart-msg" class="text-center py-5 text-muted px-3">
+                        <div
+                            style="width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.03); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+                            <i class="bi bi-cart-x fs-2 opacity-50"></i>
+                        </div>
+                        <h6 class="text-secondary fw-semibold">Carrito Vacío</h6>
+                        <p class="small text-muted mb-0">Escanea o usa los botones de acceso rápido para iniciar el
+                            cobro.</p>
+                    </div>
+                </div>
+
+                <div class="pos-cart-footer p-3" style="border-top: 1px solid var(--border-glass); background: rgba(0,0,0,0.15);">
+                    <div class="cart-total-box">
+                        <div class="d-flex justify-content-between text-secondary small mb-1">
+                            <span>Artículos totales:</span>
+                            <span id="items-count" class="fw-semibold">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-white fs-5">Total a Pagar:</span>
+                            <span id="cart-total" class="fs-3 fw-bolder text-success">$0.00</span>
+                        </div>
+                    </div>
+
+                    <button class="btn-modern-success" onclick="openCheckoutModal()" id="checkout-btn" disabled>
+                        <i class="bi bi-cash-coin fs-5"></i> Cobrar [F2]
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DE COBRO Y CÁLCULO DE CAMBIO -->
+<div class="modal fade modal-glass" id="checkoutModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+                    <i class="bi bi-wallet2 text-success"></i> Cobro de Orden
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <!-- Gran Total -->
+                <div class="text-center p-3 rounded-3 mb-4"
+                    style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass);">
+                    <span class="text-secondary text-uppercase small fw-bold tracking-wide">Total a Cobrar</span>
+                    <div class="display-5 fw-bold text-success my-1" id="modal-total-display">$0.00</div>
+                    <small class="text-muted" id="modal-items-summary">0 artículos</small>
+                </div>
+
+                <!-- Monto Recibido -->
+                <div class="mb-3">
+                    <label class="form-label-modern">Paga con / Efectivo Recibido ($)</label>
+                    <input type="number" step="0.5" id="cash-received-input"
+                        class="form-control-modern fs-3 fw-bold text-white text-center" placeholder="0.00"
+                        oninput="calculateChange()">
+                </div>
+
+                <!-- Botones Rápidos de Billetes -->
+                <div class="mb-4">
+                    <label class="form-label-modern mb-2" style="font-size: 0.72rem;">Billetes Frecuentes</label>
+                    <div class="row g-2">
+                        <div class="col-3"><button type="button" class="btn bill-preset-btn w-100"
+                                onclick="setCashAmount(50)">$50</button></div>
+                        <div class="col-3"><button type="button" class="btn bill-preset-btn w-100"
+                                onclick="setCashAmount(100)">$100</button></div>
+                        <div class="col-3"><button type="button" class="btn bill-preset-btn w-100"
+                                onclick="setCashAmount(200)">$200</button></div>
+                        <div class="col-3"><button type="button" class="btn bill-preset-btn w-100"
+                                onclick="setCashAmount(500)">$500</button></div>
+                    </div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100 py-1"
+                            onclick="setExactAmount()">
+                            <i class="bi bi-check-all"></i> Pago Exacto
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Caja de Cambio Calculado -->
+                <div class="p-3 rounded-3 text-center" id="change-box"
+                    style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25);">
+                    <span class="text-secondary small fw-bold text-uppercase">Cambio a Entregar</span>
+                    <div class="display-6 fw-bold text-success my-1" id="change-display">$0.00</div>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar (Esc)</button>
+                <button type="button" class="btn-modern-success w-auto px-4" id="btn-confirm-checkout"
+                    onclick="confirmPaymentAndPrint()">
+                    <i class="bi bi-check2-circle"></i> Confirmar Venta [Enter]
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FORMATO TICKET TÉRMICO (Solo visible al imprimir) -->
+<div id="thermal-ticket-container">
+    <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
+        <h4 style="margin: 0; font-size: 16px;">PAPELERÍA GARAJE</h4>
+        <p style="margin: 2px 0; font-size: 11px;">Comprobante de Venta</p>
+        <p style="margin: 0; font-size: 10px;" id="ticket-date"></p>
+    </div>
+    <div id="ticket-items-list" style="margin-bottom: 8px; border-bottom: 1px dashed #000; padding-bottom: 8px;">
+        <!-- Items inyectados -->
+    </div>
+    <div style="font-size: 13px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 4px;">
+        <span>TOTAL:</span>
+        <span id="ticket-total">$0.00</span>
+    </div>
+    <div style="font-size: 11px; display: flex; justify-content: space-between;">
+        <span>PAGADO CON:</span>
+        <span id="ticket-paid">$0.00</span>
+    </div>
+    <div style="font-size: 11px; display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <span>CAMBIO:</span>
+        <span id="ticket-change">$0.00</span>
+    </div>
+    <div style="text-align: center; font-size: 11px;">
+        ¡GRACIAS POR SU COMPRA!<br>Vuelva pronto.
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let cart = [];
+    let heldSales = [];
+    let checkoutModalInstance = null;
+    let audioCtx = null;
+
+    const availableProducts = [
+        {% for p in products %}
+    {
+        id: { { p.id } },
+        name: { { p.name | tojson } },
+        barcode: { { (p.barcode or '') | tojson } },
+        price: { { p.price } },
+        stock: { { p.stock } }
+    },
+    {% endfor %}
+    ];
+
+    // Web Audio API para Beep nativo sin dependencias
+    function playBeep(frequency = 1200, duration = 0.08, type = 'sine') {
+        try {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.value = frequency;
+            gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        } catch (e) {
+            // Silencioso en caso de no soportar audio
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        checkoutModalInstance = new bootstrap.Modal(document.getElementById('checkoutModal'));
+        updateHoldBadge();
+    });
+
+    // Atajos de Teclado Globales
+    document.addEventListener('keydown', (e) => {
+        // Si el modal está abierto y presionan Enter para confirmar
+        const modalEl = document.getElementById('checkoutModal');
+        const isModalOpen = modalEl && modalEl.classList.contains('show');
+
+        if (isModalOpen) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                confirmPaymentAndPrint();
+            }
+            return;
+        }
+
+        // F2 o Barra Espaciadora (si no se está escribiendo en un input) para Cobrar
+        if (e.key === 'F2') {
+            e.preventDefault();
+            if (cart.length > 0) openCheckoutModal();
+        }
+        // F4 para limpiar carrito
+        else if (e.key === 'F4') {
+            e.preventDefault();
+            if (cart.length > 0) clearCart();
+        }
+        // F7 para poner en espera
+        else if (e.key === 'F7') {
+            e.preventDefault();
+            toggleHoldSale();
+        }
+        // Ctrl + B para ir al campo de código de barras
+        else if (e.ctrlKey && (e.key === 'b' || e.key === 'B')) {
+            e.preventDefault();
+            const input = document.getElementById('barcode-input');
+            input.focus();
+            input.select();
+        }
+    });
+
+    function showScanFeedback(text, isError = false) {
+        const badge = document.getElementById('scan-feedback');
+        badge.textContent = text;
+        badge.className = isError
+            ? 'badge bg-danger text-white py-1 px-2'
+            : 'badge bg-success text-white py-1 px-2';
+        badge.style.display = 'inline-block';
+        setTimeout(() => { badge.style.display = 'none'; }, 2500);
+    }
+
+    function handleBarcodeScan(e) {
+        e.preventDefault();
+        const input = document.getElementById('barcode-input');
+        const code = input.value.trim();
+        if (!code) return;
+
+        const prod = availableProducts.find(p => p.barcode && p.barcode.toLowerCase() === code.toLowerCase());
+        if (prod) {
+            addToCart(prod.id, prod.name, prod.price, prod.stock);
+            playBeep(1400, 0.08); // Beep de éxito
+            showScanFeedback(`✓ Agregado: ${prod.name}`);
+            input.value = '';
+        } else {
+            fetch(`/api/product_by_barcode/${encodeURIComponent(code)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.product) {
+                        const p = data.product;
+                        addToCart(p.id, p.name, p.price, p.stock);
+                        playBeep(1400, 0.08);
+                        showScanFeedback(`✓ Agregado: ${p.name}`);
+                    } else {
+                        playBeep(450, 0.15, 'sawtooth'); // Beep de error
+                        showScanFeedback(`✗ Código "${code}" no encontrado`, true);
+                    }
+                    input.value = '';
+                })
+                .catch(() => {
+                    playBeep(450, 0.15, 'sawtooth');
+                    showScanFeedback(`✗ Código "${code}" no encontrado`, true);
+                    input.value = '';
+                });
+        }
+        input.focus();
+    }
+
+    // Acceso Rápido para Servicios de Papelería
+    let quickServiceCounter = -1;
+    function addQuickService(name, price) {
+        playBeep(1200, 0.06);
+        let item = cart.find(i => i.name === name);
+        if (item) {
+            item.quantity++;
+        } else {
+            cart.push({ id: quickServiceCounter--, name, price, quantity: 1, maxStock: 9999, isService: true });
+        }
+        renderCart();
+    }
+
+    function addToCart(id, name, price, maxStock) {
+        playBeep(1300, 0.05);
+        let item = cart.find(i => i.id === id);
+        if (item) {
+            if (item.quantity >= maxStock) {
+                alert(`No hay más unidades disponibles. Stock máximo: ${maxStock}`);
+                return;
+            }
+            item.quantity++;
+        } else {
+            cart.push({ id, name, price, quantity: 1, maxStock });
+        }
+        renderCart();
+    }
+
+    function updateQuantity(id, delta) {
+        let item = cart.find(i => i.id === id);
+        if (!item) return;
+
+        if (delta > 0 && item.quantity >= item.maxStock) {
+            alert(`Stock máximo alcanzado (${item.maxStock})`);
+            return;
+        }
+
+        item.quantity += delta;
+        if (item.quantity <= 0) {
+            cart = cart.filter(i => i.id !== id);
+        }
+        renderCart();
+    }
+
+    function removeFromCart(id) {
+        cart = cart.filter(i => i.id !== id);
+        renderCart();
+    }
+
+    function clearCart() {
+        if (confirm('¿Deseas vaciar la orden actual?')) {
+            cart = [];
+            renderCart();
+        }
+    }
+
+    // Retener / Poner en espera
+    function toggleHoldSale() {
+        if (cart.length > 0) {
+            heldSales.push([...cart]);
+            cart = [];
+            renderCart();
+            updateHoldBadge();
+            playBeep(900, 0.1);
+            showScanFeedback('Venta retenida en espera');
+        } else if (heldSales.length > 0) {
+            cart = heldSales.pop();
+            renderCart();
+            updateHoldBadge();
+            playBeep(1300, 0.1);
+            showScanFeedback('Venta retomada');
+        }
+    }
+
+    function updateHoldBadge() {
+        const text = document.getElementById('hold-badge-text');
+        text.textContent = `En Espera (${heldSales.length})`;
+        const btn = document.getElementById('hold-sale-btn');
+        if (heldSales.length > 0) {
+            btn.classList.add('text-warning', 'fw-bold');
+        } else {
+            btn.classList.remove('text-warning', 'fw-bold');
+        }
+    }
+
+    function getCartTotal() {
+        return cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    }
+
+    function renderCart() {
+        const cartList = document.getElementById('cart-items');
+        const emptyMsg = document.getElementById('empty-cart-msg');
+        const totalEl = document.getElementById('cart-total');
+        const countEl = document.getElementById('items-count');
+        const checkoutBtn = document.getElementById('checkout-btn');
+        const clearBtn = document.getElementById('clear-cart-btn');
+
+        cartList.innerHTML = '';
+        let total = 0;
+        let count = 0;
+
+        if (cart.length > 0) {
+            emptyMsg.style.display = 'none';
+            clearBtn.style.display = 'block';
+        } else {
+            emptyMsg.style.display = 'block';
+            clearBtn.style.display = 'none';
+        }
+
+        cart.forEach(item => {
+            const itemTotal = item.price * item.quantity;
+            total += itemTotal;
+            count += item.quantity;
+
+            const row = document.createElement('div');
+            row.className = 'cart-item-row';
+            row.innerHTML = `
+                <div style="flex: 1; min-width: 0; padding-right: 10px;">
+                    <div class="fw-semibold text-truncate text-white" title="${item.name}">${item.name}</div>
+                    <div class="small text-muted">$${item.price.toFixed(2)} c/u</div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center rounded-pill px-2 py-1" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass);">
+                        <button class="btn btn-link text-secondary p-0 text-decoration-none" onclick="updateQuantity(${item.id}, -1)">
+                            <i class="bi bi-dash"></i>
+                        </button>
+                        <span class="mx-2 fw-bold text-white small" style="min-width: 14px; text-align: center;">${item.quantity}</span>
+                        <button class="btn btn-link text-secondary p-0 text-decoration-none" onclick="updateQuantity(${item.id}, 1)">
+                            <i class="bi bi-plus"></i>
+                        </button>
+                    </div>
+                    <div class="text-end fw-bold text-success" style="min-width: 60px;">
+                        $${itemTotal.toFixed(2)}
+                    </div>
+                    <button class="btn btn-sm btn-link text-danger p-0" onclick="removeFromCart(${item.id})" title="Quitar">
+                        <i class="bi bi-x-circle fs-6"></i>
+                    </button>
+                </div>
+            `;
+            cartList.appendChild(row);
+        });
+
+        totalEl.textContent = `$${total.toFixed(2)}`;
+        countEl.textContent = count;
+        checkoutBtn.disabled = cart.length === 0;
+    }
+
+    function filterProducts() {
+        const query = document.getElementById('search-input').value.toLowerCase();
+        const items = document.querySelectorAll('.product-item');
+        items.forEach(item => {
+            const name = item.getAttribute('data-name');
+            const barcode = item.getAttribute('data-barcode');
+            item.style.display = (name.includes(query) || barcode.includes(query)) ? '' : 'none';
+        });
+    }
+
+    // Modal de Cobro y Cambio
+    function openCheckoutModal() {
+        if (cart.length === 0) return;
+        const total = getCartTotal();
+        document.getElementById('modal-total-display').textContent = `$${total.toFixed(2)}`;
+        document.getElementById('modal-items-summary').textContent = `${cart.reduce((a, b) => a + b.quantity, 0)} artículos en orden`;
+
+        const cashInput = document.getElementById('cash-received-input');
+        cashInput.value = '';
+        calculateChange();
+        checkoutModalInstance.show();
+        setTimeout(() => cashInput.focus(), 250);
+    }
+
+    function setCashAmount(amount) {
+        document.getElementById('cash-received-input').value = amount;
+        calculateChange();
+    }
+
+    function setExactAmount() {
+        const total = getCartTotal();
+        document.getElementById('cash-received-input').value = total.toFixed(2);
+        calculateChange();
+    }
+
+    function calculateChange() {
+        const total = getCartTotal();
+        const cash = parseFloat(document.getElementById('cash-received-input').value) || 0;
+        const changeEl = document.getElementById('change-display');
+        const changeBox = document.getElementById('change-box');
+        const confirmBtn = document.getElementById('btn-confirm-checkout');
+
+        const change = cash - total;
+
+        if (cash >= total) {
+            changeEl.textContent = `$${change.toFixed(2)}`;
+            changeEl.className = 'display-6 fw-bold text-success my-1';
+            changeBox.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+            confirmBtn.disabled = false;
+        } else {
+            const missing = total - cash;
+            changeEl.textContent = `Faltan: $${missing.toFixed(2)}`;
+            changeEl.className = 'display-6 fw-bold text-danger my-1';
+            changeBox.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+            confirmBtn.disabled = cash > 0; // Permitir confirmar si está vacío (pago exacto implícito)
+        }
+    }
+
+    async function confirmPaymentAndPrint() {
+        const total = getCartTotal();
+        let cash = parseFloat(document.getElementById('cash-received-input').value);
+        if (isNaN(cash) || cash < total) {
+            cash = total; // Asumir pago exacto
+        }
+        const change = cash - total;
+
+        const btn = document.getElementById('btn-confirm-checkout');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Procesando...';
+
+        // Filtrar productos reales para descontar stock en BD
+        const dbItems = cart.filter(i => i.id > 0);
+
+        try {
+            const response = await fetch('/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cart: dbItems })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                // Llenar datos de ticket
+                fillTicketData(cash, change);
+                checkoutModalInstance.hide();
+                playBeep(1600, 0.2);
+
+                if (confirm('¿Deseas imprimir el ticket de venta?')) {
+                    window.print();
+                }
+
+                cart = [];
+                renderCart();
+                window.location.reload();
+            } else {
+                alert('Error al realizar la venta: ' + data.error);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check2-circle"></i> Confirmar Venta [Enter]';
+            }
+        } catch (e) {
+            alert('Error al comunicar con el servidor.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle"></i> Confirmar Venta [Enter]';
+        }
+    }
+
+    function fillTicketData(paid, change) {
+        document.getElementById('ticket-date').textContent = new Date().toLocaleString();
+        document.getElementById('ticket-total').textContent = `$${getCartTotal().toFixed(2)}`;
+        document.getElementById('ticket-paid').textContent = `$${paid.toFixed(2)}`;
+        document.getElementById('ticket-change').textContent = `$${change.toFixed(2)}`;
+
+        const list = document.getElementById('ticket-items-list');
+        list.innerHTML = '';
+        cart.forEach(item => {
+            const line = document.createElement('div');
+            line.style.display = 'flex';
+            line.style.justifyContent = 'space-between';
+            line.style.fontSize = '11px';
+            line.style.margin = '2px 0';
+            line.innerHTML = `
+                <span>${item.quantity}x ${item.name.substring(0, 18)}</span>
+                <span>$${(item.price * item.quantity).toFixed(2)}</span>
+            `;
+            list.appendChild(line);
+        });
+    }
+</script>
+{% endblock %}

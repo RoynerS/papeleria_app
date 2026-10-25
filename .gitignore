@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+papeleria.db
+instance/
+.env
+.env.*
+!.env.example
+*.log
+Thumbs.db
+Desktop.ini

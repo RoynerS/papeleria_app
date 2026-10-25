@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Papelería Garaje | SaaS POS</title>
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-logo">
+            <div class="brand-badge">
+                <i class="bi bi-box-seam-fill"></i>
+            </div>
+            <div class="sidebar-brand-text">
+                <span class="brand-text">Papelería</span>
+                <span class="brand-sub">Garaje POS</span>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <span class="sidebar-section-label">PRINCIPAL</span>
+            <a class="sidebar-link {{ 'active' if request.endpoint == 'pos' else '' }}" href="{{ url_for('pos') }}">
+                <span class="sidebar-link-icon"><i class="bi bi-cart3"></i></span>
+                <span class="sidebar-link-label">Punto de Venta</span>
+                {% if request.endpoint == 'pos' %}<span class="sidebar-active-dot"></span>{% endif %}
+            </a>
+            <a class="sidebar-link {{ 'active' if request.endpoint == 'inventory' else '' }}" href="{{ url_for('inventory') }}">
+                <span class="sidebar-link-icon"><i class="bi bi-boxes"></i></span>
+                <span class="sidebar-link-label">Inventario</span>
+                {% if request.endpoint == 'inventory' %}<span class="sidebar-active-dot"></span>{% endif %}
+            </a>
+            <a class="sidebar-link {{ 'active' if request.endpoint == 'finance' else '' }}" href="{{ url_for('finance') }}">
+                <span class="sidebar-link-icon"><i class="bi bi-graph-up-arrow"></i></span>
+                <span class="sidebar-link-label">Finanzas</span>
+                {% if request.endpoint == 'finance' %}<span class="sidebar-active-dot"></span>{% endif %}
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="sidebar-footer-card">
+                <i class="bi bi-currency-dollar text-success"></i>
+                <span class="text-muted small ms-2">Moneda: COP</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Mobile topbar -->
+    <header class="mobile-topbar d-lg-none">
+        <button class="sidebar-toggle-btn" id="sidebarToggle">
+            <i class="bi bi-list fs-4"></i>
+        </button>
+        <div class="d-flex align-items-center gap-2">
+            <div class="brand-badge" style="width:32px;height:32px;border-radius:10px;font-size:0.85rem;">
+                <i class="bi bi-box-seam-fill"></i>
+            </div>
+            <span class="brand-text" style="font-size:1rem;">Papelería Garaje</span>
+        </div>
+    </header>
+
+    <!-- Sidebar backdrop for mobile -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- Main content -->
+    <main class="main-content">
+        <div class="content-wrapper">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Mobile sidebar toggle
+        const sidebar = document.getElementById('sidebar');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        const toggleBtn = document.getElementById('sidebarToggle');
+
+        function openSidebar() {
+            sidebar.classList.add('open');
+            backdrop.classList.add('show');
+        }
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            backdrop.classList.remove('show');
+        }
+
+        if (toggleBtn) toggleBtn.addEventListener('click', openSidebar);
+        if (backdrop) backdrop.addEventListener('click', closeSidebar);
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
