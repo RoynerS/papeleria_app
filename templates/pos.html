@@ -180,7 +180,7 @@
                             <span id="items-count" class="fw-semibold">0</span>
                         </div>
                         <div class="d-flex justify-content-between align-items-center">
-                            <span class="fw-bold text-white fs-5">Total a Pagar:</span>
+                            <span class="fw-bold text-body fs-5">Total a Pagar:</span>
                             <span id="cart-total" class="fs-3 fw-bolder text-success">$0 COP</span>
                         </div>
                     </div>
@@ -218,7 +218,7 @@
                 <div class="mb-3">
                     <label class="form-label-modern">Paga con / Efectivo Recibido (COP)</label>
                     <input type="number" step="1" min="0" id="cash-received-input"
-                        class="form-control-modern fs-3 fw-bold text-white text-center" placeholder="0"
+                        class="form-control-modern fs-3 fw-bold text-body text-center" placeholder="0"
                         oninput="calculateChange()">
                 </div>
 
@@ -248,6 +248,12 @@
                     <input type="text" id="customer-national-id" class="form-control-modern" inputmode="numeric"
                         autocomplete="off" maxlength="15" placeholder="Número de cédula">
                     <small class="text-muted">Acumula 1 punto por cada $1.000 COP para beneficios futuros.</small>
+                </div>
+                <div class="mb-3">
+                    <label for="customer-email" class="form-label-modern">Correo para el comprobante (opcional)</label>
+                    <input type="email" id="customer-email" class="form-control-modern" autocomplete="email"
+                        maxlength="254" placeholder="cliente@correo.com">
+                    <small class="text-muted" id="customer-email-help">Ingresa también la cédula para guardar el correo con los puntos del cliente.</small>
                 </div>
 
                 <!-- Caja de Cambio Calculado -->
@@ -357,6 +363,27 @@
         if (window.bootstrap?.Modal) {
             checkoutModalInstance = new bootstrap.Modal(document.getElementById('checkoutModal'));
         }
+        document.getElementById('customer-national-id').addEventListener('blur', async event => {
+            const nationalId = event.target.value.trim();
+            const emailInput = document.getElementById('customer-email');
+            if (!/^\d{6,15}$/.test(nationalId)) return;
+            try {
+                const response = await fetch(`/api/customer/${encodeURIComponent(nationalId)}`);
+                const customer = await response.json();
+                if (customer.success && customer.found && !emailInput.value && customer.email) {
+                    emailInput.value = customer.email;
+                    document.getElementById('customer-email-help').textContent =
+                        `Correo cargado · ${customer.points} puntos acumulados`;
+                }
+            } catch (error) {
+                // La venta puede continuar aunque no esté disponible la consulta de clientes.
+            }
+        });
+        document.getElementById('customer-national-id').addEventListener('input', () => {
+            document.getElementById('customer-email').value = '';
+            document.getElementById('customer-email-help').textContent =
+                'Ingresa también la cédula para guardar el correo con los puntos del cliente.';
+        });
         updateHoldBadge();
     });
 
@@ -566,7 +593,7 @@
             row.className = 'cart-item-row';
             row.innerHTML = `
                 <div style="flex: 1; min-width: 0; padding-right: 10px;">
-                    <div class="fw-semibold text-truncate text-white" title="${item.name}">${item.name}</div>
+                    <div class="fw-semibold text-truncate text-body" title="${item.name}">${item.name}</div>
                     <div class="small text-muted">${formatCOP(item.price)} c/u</div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
@@ -574,7 +601,7 @@
                         <button class="btn btn-link text-secondary p-0 text-decoration-none" onclick="updateQuantity(${item.id}, -1)">
                             <i class="bi bi-dash"></i>
                         </button>
-                        <span class="mx-2 fw-bold text-white small" style="min-width: 14px; text-align: center;">${item.quantity}</span>
+                        <span class="mx-2 fw-bold text-body small" style="min-width: 14px; text-align: center;">${item.quantity}</span>
                         <button class="btn btn-link text-secondary p-0 text-decoration-none" onclick="updateQuantity(${item.id}, 1)">
                             <i class="bi bi-plus"></i>
                         </button>
@@ -672,7 +699,11 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
                 },
-                body: JSON.stringify({ cart, customer_id: document.getElementById('customer-national-id').value.trim() })
+                body: JSON.stringify({
+                    cart,
+                    customer_id: document.getElementById('customer-national-id').value.trim(),
+                    customer_email: document.getElementById('customer-email').value.trim()
+                })
             });
             const data = await response.json();
 
@@ -685,7 +716,9 @@
                 const loyaltyMessage = data.customer_points !== null
                     ? `Venta registrada. Ganaste ${data.points_earned} puntos y tienes ${data.customer_points} puntos acumulados.`
                     : 'Venta registrada.';
-                alert(loyaltyMessage);
+                alert(data.customer_email
+                    ? `${loyaltyMessage}\nCorreo guardado para este cliente: ${data.customer_email}.`
+                    : loyaltyMessage);
 
                 if (confirm('¿Deseas imprimir el ticket de venta?')) {
                     window.print();
@@ -693,6 +726,9 @@
 
                 cart = [];
                 document.getElementById('customer-national-id').value = '';
+                document.getElementById('customer-email').value = '';
+                document.getElementById('customer-email-help').textContent =
+                    'Se guarda junto con la cédula para futuras compras.';
                 renderCart();
                 window.location.reload();
             } else {

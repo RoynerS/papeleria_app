@@ -22,6 +22,7 @@
                         <th>Ticket</th>
                         <th>Movimiento</th>
                         <th>Cédula</th>
+                        <th>Correo</th>
                         <th>Detalle</th>
                         <th class="text-end">Total COP</th>
                         <th class="text-end">Puntos</th>
@@ -40,6 +41,7 @@
                             {% endif %}
                         </td>
                         <td>{{ entry.customer_id or '—' }}</td>
+                        <td>{{ entry.customer_email or '—' }}</td>
                         <td>
                             {% if entry.items_list %}
                             <details>
@@ -56,7 +58,7 @@
                         <td class="text-end">{% if entry.action == 'VENTA ANULADA' %}−{% endif %}{{ entry.points_earned }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="7" class="text-center py-5 text-muted">Todavía no hay movimientos de venta para auditar.</td></tr>
+                    <tr><td colspan="8" class="text-center py-5 text-muted">Todavía no hay movimientos de venta para auditar.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

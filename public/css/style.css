@@ -23,8 +23,8 @@
     /* Texto */
     --tx:     #111827;
     --tx-2:   #374151;
-    --tx-3:   #6B7280;
-    --tx-4:   #9CA3AF;
+    --tx-3:   #475569;
+    --tx-4:   #64748B;
 
     /* Acento principal */
     --indigo:       #4f46e5;
@@ -69,6 +69,10 @@ body {
     -webkit-font-smoothing: antialiased;
     display: flex;
 }
+
+/* Keep supporting text readable on the light content surfaces. */
+.content-wrapper .text-muted,
+.content-wrapper .text-secondary { color: #475569 !important; }
 
 a { text-decoration: none; }
 
