@@ -3,7 +3,7 @@
 <div class="page-header mb-4">
     <div>
         <h1 class="page-title"><i class="bi bi-people text-primary"></i> Clientes y puntos</h1>
-        <p class="page-subtitle">Cada cliente se registra con su cédula al comprar. En próximas ventas, vuelve a escribirla para sumar puntos automáticamente.</p>
+        <p class="page-subtitle">Consulta los nombres, correos y puntos guardados al registrar una compra con autorización.</p>
     </div>
     <a href="{{ url_for('pos') }}" class="btn-action btn-action-primary"><i class="bi bi-cart3"></i> Ir al punto de venta</a>
 </div>
@@ -34,19 +34,20 @@
         <div class="glass-panel-title"><i class="bi bi-card-list text-primary"></i> Registro de clientes</div>
         <div class="search-bar-modern customer-search">
             <i class="bi bi-search"></i>
-            <input type="search" id="customer-search" class="form-control-modern" placeholder="Buscar por cédula o correo">
+            <input type="search" id="customer-search" class="form-control-modern" placeholder="Buscar por nombre, cédula o correo">
         </div>
     </div>
     <div class="glass-panel-body p-0">
         <div class="table-responsive">
             <table class="table-modern" id="customers-table">
                 <thead><tr>
-                    <th>Cédula</th><th>Correo</th><th>Autorización</th><th class="text-end">Puntos</th>
+                    <th>Nombre</th><th>Cédula</th><th>Correo</th><th>Autorización</th><th class="text-end">Puntos</th>
                     <th class="text-end">Compras</th><th>Última compra</th><th>Gestión de correo</th>
                 </tr></thead>
                 <tbody>
                     {% for customer in customer_list %}
                     <tr class="customer-row">
+                        <td class="customer-name">{{ customer.name or 'Sin nombre' }}</td>
                         <td class="fw-semibold customer-id">{{ customer.national_id }}</td>
                         <td class="customer-email">{{ customer.email or 'Sin correo registrado' }}</td>
                         <td>{% if customer.consent_at %}<span class="status-badge status-success">Autorizado</span>{% else %}<span class="status-badge status-warning">Solicitar en caja</span>{% endif %}</td>
@@ -66,9 +67,9 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr class="customer-empty"><td colspan="7" class="text-center py-5 text-muted">Aún no hay clientes. Registra una cédula durante una venta para empezar a acumular puntos.</td></tr>
+                    <tr class="customer-empty"><td colspan="8" class="text-center py-5 text-muted">Aún no hay clientes. Registra una cédula durante una venta para empezar a acumular puntos.</td></tr>
                     {% endfor %}
-                    <tr id="customer-no-results" style="display:none"><td colspan="7" class="text-center py-4 text-muted">No se encontraron clientes con esa búsqueda.</td></tr>
+                    <tr id="customer-no-results" style="display:none"><td colspan="8" class="text-center py-4 text-muted">No se encontraron clientes con esa búsqueda.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -84,7 +85,8 @@
         let visible = 0;
         rows.forEach(row => {
             const match = row.querySelector('.customer-id').textContent.toLowerCase().includes(query) ||
-                row.querySelector('.customer-email').textContent.toLowerCase().includes(query);
+                row.querySelector('.customer-email').textContent.toLowerCase().includes(query) ||
+                row.querySelector('.customer-name').textContent.toLowerCase().includes(query);
             row.style.display = match ? '' : 'none';
             if (match) visible++;
         });

@@ -98,7 +98,7 @@ def init_db():
     if app.config['DATABASE_URL']:
         statements = [
             '''CREATE TABLE IF NOT EXISTS customers (
-                national_id TEXT PRIMARY KEY, email TEXT, points INTEGER NOT NULL DEFAULT 0,
+                national_id TEXT PRIMARY KEY, name TEXT, email TEXT, points INTEGER NOT NULL DEFAULT 0,
                 consent_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'America/Bogota'))''',
             '''CREATE TABLE IF NOT EXISTS products (
@@ -107,7 +107,7 @@ def init_db():
                 stock INTEGER NOT NULL DEFAULT 0)''',
             '''CREATE TABLE IF NOT EXISTS sales (
                 id BIGSERIAL PRIMARY KEY, total DOUBLE PRECISION NOT NULL,
-                customer_id TEXT REFERENCES customers(national_id), customer_email TEXT,
+                customer_id TEXT REFERENCES customers(national_id), customer_name TEXT, customer_email TEXT,
                 points_earned INTEGER NOT NULL DEFAULT 0,
                 date TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'America/Bogota'))''',
             '''CREATE TABLE IF NOT EXISTS sale_items (
@@ -117,7 +117,7 @@ def init_db():
             '''CREATE TABLE IF NOT EXISTS sales_audit (
                 id BIGSERIAL PRIMARY KEY, sale_id BIGINT NOT NULL, action TEXT NOT NULL,
                 total DOUBLE PRECISION NOT NULL, customer_id TEXT, points_earned INTEGER NOT NULL DEFAULT 0,
-                customer_email TEXT,
+                customer_name TEXT, customer_email TEXT,
                 items TEXT NOT NULL DEFAULT '[]',
                 occurred_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'America/Bogota'))''',
             '''CREATE TABLE IF NOT EXISTS expenses (
@@ -137,17 +137,21 @@ def init_db():
         conn.execute('ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS item_name TEXT')
         conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_id TEXT REFERENCES customers(national_id)')
         conn.execute('ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT')
+        conn.execute('ALTER TABLE customers ADD COLUMN IF NOT EXISTS name TEXT')
         conn.execute('ALTER TABLE customers ADD COLUMN IF NOT EXISTS consent_at TIMESTAMP')
         conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_email TEXT')
+        conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_name TEXT')
         conn.execute('ALTER TABLE sales ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0')
         conn.execute('ALTER TABLE sales_audit ADD COLUMN IF NOT EXISTS customer_id TEXT')
         conn.execute('ALTER TABLE sales_audit ADD COLUMN IF NOT EXISTS customer_email TEXT')
+        conn.execute('ALTER TABLE sales_audit ADD COLUMN IF NOT EXISTS customer_name TEXT')
         conn.execute('ALTER TABLE sales_audit ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0')
         conn.execute("ALTER TABLE sales_audit ADD COLUMN IF NOT EXISTS items TEXT NOT NULL DEFAULT '[]'")
     else:
         conn.execute('''
         CREATE TABLE IF NOT EXISTS customers (
             national_id TEXT PRIMARY KEY,
+            name TEXT,
             email TEXT,
             points INTEGER NOT NULL DEFAULT 0,
             consent_at TIMESTAMP,
@@ -169,6 +173,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             total REAL NOT NULL,
             customer_id TEXT,
+            customer_name TEXT,
             customer_email TEXT,
             points_earned INTEGER NOT NULL DEFAULT 0,
             date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -193,6 +198,7 @@ def init_db():
             action TEXT NOT NULL,
             total REAL NOT NULL,
             customer_id TEXT,
+            customer_name TEXT,
             customer_email TEXT,
             points_earned INTEGER NOT NULL DEFAULT 0,
             items TEXT NOT NULL DEFAULT '[]',
@@ -220,10 +226,13 @@ def init_db():
             'ALTER TABLE sale_items ADD COLUMN item_name TEXT',
             'ALTER TABLE sales ADD COLUMN customer_id TEXT',
             'ALTER TABLE customers ADD COLUMN email TEXT',
+            'ALTER TABLE customers ADD COLUMN name TEXT',
             'ALTER TABLE customers ADD COLUMN consent_at TIMESTAMP',
             'ALTER TABLE sales ADD COLUMN customer_email TEXT',
+            'ALTER TABLE sales ADD COLUMN customer_name TEXT',
             'ALTER TABLE sales ADD COLUMN points_earned INTEGER NOT NULL DEFAULT 0',
             'ALTER TABLE sales_audit ADD COLUMN customer_email TEXT',
+            'ALTER TABLE sales_audit ADD COLUMN customer_name TEXT',
         ]:
             try:
                 conn.execute(migration)
@@ -232,7 +241,7 @@ def init_db():
     conn.commit()
     # Preserve an auditable snapshot for sales recorded before this feature existed.
     legacy_sales = conn.execute('''
-        SELECT s.id, s.total, s.date, s.customer_id, s.customer_email, s.points_earned
+        SELECT s.id, s.total, s.date, s.customer_id, s.customer_name, s.customer_email, s.points_earned
         FROM sales s
         WHERE NOT EXISTS (SELECT 1 FROM sales_audit a WHERE a.sale_id=s.id AND a.action='VENTA REGISTRADA')
     ''').fetchall()
@@ -247,9 +256,9 @@ def init_db():
                     'unit_price': row['price'], 'line_total': float(row['price'] or 0) * int(row['quantity'] or 0)}
                    for row in sale_items]
         conn.execute('''
-            INSERT INTO sales_audit (sale_id, action, total, customer_id, customer_email, points_earned, items, occurred_at)
-            VALUES (?, 'VENTA REGISTRADA', ?, ?, ?, ?, ?, ?)
-        ''', (sale['id'], sale['total'], sale['customer_id'], sale['customer_email'], sale['points_earned'] or 0,
+            INSERT INTO sales_audit (sale_id, action, total, customer_id, customer_name, customer_email, points_earned, items, occurred_at)
+            VALUES (?, 'VENTA REGISTRADA', ?, ?, ?, ?, ?, ?, ?)
+        ''', (sale['id'], sale['total'], sale['customer_id'], sale['customer_name'], sale['customer_email'], sale['points_earned'] or 0,
               json.dumps(details, ensure_ascii=False), sale['date']))
     conn.commit()
     conn.close()
@@ -497,10 +506,10 @@ def sales_audit():
 def customers():
     conn = get_db_connection()
     customer_rows = conn.execute('''
-        SELECT c.national_id, c.email, c.points, c.consent_at, c.created_at,
+        SELECT c.national_id, c.name, c.email, c.points, c.consent_at, c.created_at,
                COUNT(s.id) AS purchase_count, MAX(s.date) AS last_purchase
         FROM customers c LEFT JOIN sales s ON s.customer_id=c.national_id
-        GROUP BY c.national_id, c.email, c.points, c.consent_at, c.created_at
+        GROUP BY c.national_id, c.name, c.email, c.points, c.consent_at, c.created_at
         ORDER BY c.created_at DESC, c.national_id
     ''').fetchall()
     conn.close()
@@ -756,9 +765,9 @@ def delete_sale(sale_id):
                     'quantity': item['quantity'], 'unit_price': item['price'],
                     'line_total': float(item['price'] or 0) * int(item['quantity'] or 0)} for item in items]
         conn.execute('''
-            INSERT INTO sales_audit (sale_id, action, total, customer_id, customer_email, points_earned, items)
-            VALUES (?, 'VENTA ANULADA', ?, ?, ?, ?, ?)
-        ''', (sale_id, sale['total'], sale['customer_id'], sale['customer_email'], sale['points_earned'] or 0,
+            INSERT INTO sales_audit (sale_id, action, total, customer_id, customer_name, customer_email, points_earned, items)
+            VALUES (?, 'VENTA ANULADA', ?, ?, ?, ?, ?, ?)
+        ''', (sale_id, sale['total'], sale['customer_id'], sale['customer_name'], sale['customer_email'], sale['points_earned'] or 0,
               json.dumps(details, ensure_ascii=False)))
         for item in items:
             if item['product_id'] is not None:
@@ -797,11 +806,11 @@ def get_customer(national_id):
     if not national_id.isdigit() or not 6 <= len(national_id) <= 15:
         return jsonify({'success': False, 'error': 'Cédula inválida'}), 400
     conn = get_db_connection()
-    customer = conn.execute('SELECT email, points, consent_at FROM customers WHERE national_id=?', (national_id,)).fetchone()
+    customer = conn.execute('SELECT name, email, points, consent_at FROM customers WHERE national_id=?', (national_id,)).fetchone()
     conn.close()
     if not customer:
         return jsonify({'success': True, 'found': False})
-    return jsonify({'success': True, 'found': True, 'email': customer['email'],
+    return jsonify({'success': True, 'found': True, 'name': customer['name'], 'email': customer['email'],
                     'points': customer['points'], 'has_consent': bool(customer['consent_at'])})
 
 @app.route('/checkout', methods=['POST'])
@@ -814,6 +823,9 @@ def checkout():
     customer_id = str(data.get('customer_id') or '').strip()
     if customer_id and (not customer_id.isdigit() or not 6 <= len(customer_id) <= 15):
         return jsonify({'success': False, 'error': 'La cédula debe tener entre 6 y 15 dígitos'}), 400
+    customer_name = str(data.get('customer_name') or '').strip()
+    if len(customer_name) > 160:
+        return jsonify({'success': False, 'error': 'El nombre del cliente debe tener máximo 160 caracteres'}), 400
     customer_email = str(data.get('customer_email') or '').strip().lower()
     if customer_email and (not customer_id or len(customer_email) > 254 or
                            not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", customer_email)):
@@ -857,30 +869,31 @@ def checkout():
         points_earned = int(total // 1000) if customer_id else 0
         customer_points = None
         if customer_id:
-            customer = conn.execute('SELECT points, email, consent_at FROM customers WHERE national_id=?',
+            customer = conn.execute('SELECT name, points, email, consent_at FROM customers WHERE national_id=?',
                                      (customer_id,)).fetchone()
             if not customer_consent:
                 return jsonify({'success': False,
                                 'error': 'Para asociar cédula, correo y puntos necesitamos autorización del cliente. Si no desea registrarse, quita la cédula y continúa la venta.'}), 400
             if customer:
                 customer_points = int(customer['points']) + points_earned
+                customer_name = customer_name or customer['name'] or ''
                 customer_email = customer_email or customer['email'] or ''
-                conn.execute('''UPDATE customers SET points=?, email=COALESCE(NULLIF(?, ''), email),
+                conn.execute('''UPDATE customers SET points=?, name=COALESCE(NULLIF(?, ''), name), email=COALESCE(NULLIF(?, ''), email),
                                 consent_at=COALESCE(consent_at, CURRENT_TIMESTAMP) WHERE national_id=?''',
-                             (customer_points, customer_email, customer_id))
+                             (customer_points, customer_name, customer_email, customer_id))
             else:
                 customer_points = points_earned
-                conn.execute('''INSERT INTO customers (national_id, email, points, consent_at)
-                                VALUES (?,?,?,CURRENT_TIMESTAMP)''',
-                             (customer_id, customer_email or None, customer_points))
+                conn.execute('''INSERT INTO customers (national_id, name, email, points, consent_at)
+                                VALUES (?,?, ?,?,CURRENT_TIMESTAMP)''',
+                             (customer_id, customer_name or None, customer_email or None, customer_points))
 
         if app.config['DATABASE_URL']:
-            cur.execute('INSERT INTO sales (total, customer_id, customer_email, points_earned) VALUES (?,?,?,?) RETURNING id',
-                        (total, customer_id or None, customer_email or None, points_earned))
+            cur.execute('INSERT INTO sales (total, customer_id, customer_name, customer_email, points_earned) VALUES (?,?,?,?,?) RETURNING id',
+                        (total, customer_id or None, customer_name or None, customer_email or None, points_earned))
             sale_id = cur.fetchone()['id']
         else:
-            cur.execute('INSERT INTO sales (total, customer_id, customer_email, points_earned) VALUES (?,?,?,?)',
-                        (total, customer_id or None, customer_email or None, points_earned))
+            cur.execute('INSERT INTO sales (total, customer_id, customer_name, customer_email, points_earned) VALUES (?,?,?,?,?)',
+                        (total, customer_id or None, customer_name or None, customer_email or None, points_earned))
             sale_id = cur.lastrowid
 
         for product_id, quantity, unit_price, item_name in verified_items:
@@ -897,14 +910,14 @@ def checkout():
                         'unit_price': unit_price, 'line_total': unit_price * quantity}
                        for product_id, quantity, unit_price, item_name in verified_items]
         conn.execute('''
-            INSERT INTO sales_audit (sale_id, action, total, customer_id, customer_email, points_earned, items)
-            VALUES (?, 'VENTA REGISTRADA', ?, ?, ?, ?, ?)
-        ''', (sale_id, total, customer_id or None, customer_email or None, points_earned,
+            INSERT INTO sales_audit (sale_id, action, total, customer_id, customer_name, customer_email, points_earned, items)
+            VALUES (?, 'VENTA REGISTRADA', ?, ?, ?, ?, ?, ?)
+        ''', (sale_id, total, customer_id or None, customer_name or None, customer_email or None, points_earned,
               json.dumps(audit_items, ensure_ascii=False)))
         conn.commit()
         return jsonify({'success': True, 'sale_id': sale_id, 'total': total,
                         'points_earned': points_earned, 'customer_points': customer_points,
-                        'customer_email': customer_email or None})
+                        'customer_name': customer_name or None, 'customer_email': customer_email or None})
     except Exception:
         conn.rollback()
         app.logger.exception('No se pudo completar la venta')

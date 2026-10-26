@@ -196,7 +196,7 @@
 
 <!-- MODAL DE COBRO Y CÁLCULO DE CAMBIO -->
 <div class="modal fade modal-glass" id="checkoutModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable checkout-dialog">
         <div class="modal-content">
             <div class="modal-header border-bottom-0 pb-0">
                 <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
@@ -215,6 +215,12 @@
                 </div>
 
                 <!-- Monto Recibido -->
+                <div class="mb-3">
+                    <label for="customer-name" class="form-label-modern">Nombre y apellidos (opcional)</label>
+                    <input type="text" id="customer-name" class="form-control-modern" autocomplete="name"
+                        maxlength="160" placeholder="Nombre completo del comprador">
+                    <small class="text-muted">Se incluirá en el comprobante; para guardarlo como cliente debe ingresar la cédula y autorizar.</small>
+                </div>
                 <div class="mb-3">
                     <label class="form-label-modern">Paga con / Efectivo Recibido (COP)</label>
                     <input type="number" step="1" min="0" id="cash-received-input"
@@ -258,7 +264,7 @@
                 <div class="form-check mb-3">
                     <input class="form-check-input" type="checkbox" id="customer-data-consent">
                     <label class="form-check-label small text-secondary" for="customer-data-consent">
-                        Autorizo usar esta cédula y correo para asociar mis compras, acumular puntos y gestionar el comprobante de compra.
+                        Autorizo guardar mi nombre, cédula y correo para asociar compras, acumular puntos y gestionar el comprobante.
                     </label>
                 </div>
 
@@ -290,6 +296,7 @@
     <div id="ticket-items-list" style="margin-bottom: 8px; border-bottom: 1px dashed #000; padding-bottom: 8px;">
         <!-- Items inyectados -->
     </div>
+    <div style="font-size: 11px; margin-bottom: 6px;" id="ticket-customer"></div>
     <div style="font-size: 13px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 4px;">
         <span>TOTAL:</span>
         <span id="ticket-total">$0 COP</span>
@@ -378,6 +385,9 @@
                 const response = await fetch(`/api/customer/${encodeURIComponent(nationalId)}`);
                 const customer = await response.json();
                 if (event.target.value.trim() !== nationalId) return;
+                if (customer.success && customer.found && !document.getElementById('customer-name').value && customer.name) {
+                    document.getElementById('customer-name').value = customer.name;
+                }
                 if (customer.success && customer.found && !emailInput.value && customer.email) {
                     emailInput.value = customer.email;
                 }
@@ -397,6 +407,7 @@
         });
         document.getElementById('customer-national-id').addEventListener('input', () => {
             document.getElementById('customer-email').value = '';
+            document.getElementById('customer-name').value = '';
             document.getElementById('customer-data-consent').checked = false;
             customerConsentTouched = false;
             document.getElementById('customer-email-help').textContent =
@@ -723,6 +734,7 @@
                 body: JSON.stringify({
                     cart,
                     customer_id: document.getElementById('customer-national-id').value.trim(),
+                    customer_name: document.getElementById('customer-name').value.trim(),
                     customer_email: document.getElementById('customer-email').value.trim(),
                     customer_consent: document.getElementById('customer-data-consent').checked
                 })
@@ -730,6 +742,12 @@
             const data = await response.json();
 
             if (data.success) {
+                if (!document.getElementById('customer-name').value && data.customer_name) {
+                    document.getElementById('customer-name').value = data.customer_name;
+                }
+                if (!document.getElementById('customer-email').value && data.customer_email) {
+                    document.getElementById('customer-email').value = data.customer_email;
+                }
                 // Llenar datos de ticket
                 fillTicketData(cash, change);
                 checkoutModalInstance.hide();
@@ -748,6 +766,7 @@
 
                 cart = [];
                 document.getElementById('customer-national-id').value = '';
+                document.getElementById('customer-name').value = '';
                 document.getElementById('customer-email').value = '';
                 document.getElementById('customer-data-consent').checked = false;
                 customerConsentTouched = false;
@@ -769,6 +788,11 @@
 
     function fillTicketData(paid, change) {
         document.getElementById('ticket-date').textContent = new Date().toLocaleString();
+        const ticketCustomer = document.getElementById('ticket-customer');
+        const receiptName = document.getElementById('customer-name').value.trim();
+        const receiptId = document.getElementById('customer-national-id').value.trim();
+        const receiptEmail = document.getElementById('customer-email').value.trim();
+        ticketCustomer.textContent = [receiptName, receiptId ? `CC: ${receiptId}` : '', receiptEmail].filter(Boolean).join(' · ');
         document.getElementById('ticket-total').textContent = formatCOP(getCartTotal());
         document.getElementById('ticket-paid').textContent = formatCOP(paid);
         document.getElementById('ticket-change').textContent = formatCOP(change);

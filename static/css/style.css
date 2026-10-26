@@ -875,6 +875,7 @@ a { text-decoration: none; }
 
 /* Modal estilo POS */
 .modal-glass .modal-content { background: var(--bg-white); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-lg); color: var(--tx); }
+.checkout-dialog .modal-body { overscroll-behavior: contain; }
 
 .bill-preset-btn {
     background: var(--bg-hover);
@@ -965,6 +966,19 @@ a { text-decoration: none; }
 }
 
 @media (max-width: 575.98px) {
+    .checkout-dialog { margin: .35rem; max-height: calc(100dvh - .7rem); }
+    .checkout-dialog .modal-content { max-height: calc(100dvh - .7rem); border-radius: 18px; }
+    .checkout-dialog .modal-header { padding: 1rem 1rem .5rem; }
+    .checkout-dialog .modal-body { padding: .9rem 1rem 1rem !important; overflow-y: auto; }
+    .checkout-dialog .modal-footer { display: grid; grid-template-columns: 1fr; gap: .6rem; padding: .5rem 1rem calc(.75rem + env(safe-area-inset-bottom)); }
+    .checkout-dialog .modal-footer > button { min-height: 46px; width: 100%; }
+    .checkout-dialog .form-control-modern { min-height: 46px; font-size: 16px; }
+    .checkout-dialog .bill-preset-btn { min-height: 46px; font-size: .88rem; }
+    .checkout-dialog .display-5 { font-size: clamp(2rem, 9vw, 2.6rem); }
+    .checkout-dialog .display-6 { font-size: clamp(1.7rem, 8vw, 2.2rem); }
+    .checkout-dialog .form-check { display: flex; align-items: flex-start; gap: .45rem; }
+    .checkout-dialog .form-check-input { flex: 0 0 auto; margin-top: .2rem; }
+    .checkout-dialog .form-check-label { line-height: 1.45; }
     .pos-page-header { align-items: flex-start; }
     .pos-open-status { padding: 6px 10px; }
     .pos-scan-panel form { flex-direction: column; }
