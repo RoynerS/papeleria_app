@@ -1,6 +1,10 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, abort, send_from_directory
+from flask import Flask, Response, render_template, request, jsonify, redirect, url_for, flash, session, abort, send_from_directory
 from pathlib import Path
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
+import csv
 import hmac
+import io
 import json
 import os
 import re
@@ -11,6 +15,7 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-only-change-me')
 app.config['DATABASE_URL'] = (os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL') or '').strip()
 IS_VERCEL = os.environ.get('VERCEL') == '1'
 DB_NAME = Path(__file__).with_name('papeleria.db')
+BOGOTA = ZoneInfo('America/Bogota')
 QUICK_SERVICES = {
     'Fotocopia B/N': 1500,
     'Fotocopia Color': 5000,
@@ -298,6 +303,133 @@ def public_css(filename):
 def inject_security_token():
     token = session.get('csrf_token')
     return {'csrf_token': token or ''}
+
+def _report_range(period, anchor):
+    if period == 'daily':
+        start = anchor
+        end = start + timedelta(days=1)
+    elif period == 'weekly':
+        start = anchor - timedelta(days=anchor.weekday())
+        end = start + timedelta(days=7)
+    elif period == 'monthly':
+        start = anchor.replace(day=1)
+        end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    else:
+        raise ValueError('Periodo inválido')
+    return start, end
+
+def _build_sales_report(period, anchor):
+    start, end = _report_range(period, anchor)
+    if app.config['DATABASE_URL']:
+        start_param = datetime.combine(start, time.min)
+        end_param = datetime.combine(end, time.min)
+    else:
+        start_param = datetime.combine(start, time.min, tzinfo=BOGOTA).astimezone(timezone.utc).replace(tzinfo=None).isoformat(' ')
+        end_param = datetime.combine(end, time.min, tzinfo=BOGOTA).astimezone(timezone.utc).replace(tzinfo=None).isoformat(' ')
+
+    conn = get_db_connection()
+    sales = conn.execute('SELECT id, date, total FROM sales WHERE date>=? AND date<? ORDER BY date',
+                         (start_param, end_param)).fetchall()
+    expenses = conn.execute('''SELECT id, date, description, category, amount
+                               FROM expenses WHERE date>=? AND date<? ORDER BY date''',
+                            (start_param, end_param)).fetchall()
+    conn.close()
+
+    daily = {}
+    cursor = start
+    while cursor < end:
+        key = cursor.isoformat()
+        daily[key] = {'date': key, 'sales': 0.0, 'tickets': 0,
+                      'restock': 0.0, 'other_expenses': 0.0}
+        cursor += timedelta(days=1)
+
+    def date_key(value):
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value.isoformat()
+        if not isinstance(value, datetime):
+            value = datetime.fromisoformat(str(value))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=BOGOTA if app.config['DATABASE_URL'] else timezone.utc)
+        return value.astimezone(BOGOTA).date().isoformat()
+
+    for sale in sales:
+        key = date_key(sale['date'])
+        if key in daily:
+            daily[key]['sales'] += float(sale['total'] or 0)
+            daily[key]['tickets'] += 1
+    for expense in expenses:
+        key = date_key(expense['date'])
+        if key in daily:
+            amount = float(expense['amount'] or 0)
+            column = 'restock' if expense['category'] == 'Mercancía / Restock' else 'other_expenses'
+            daily[key][column] += amount
+
+    rows = list(daily.values())
+    for row in rows:
+        row['expenses'] = row['restock'] + row['other_expenses']
+        row['net'] = row['sales'] - row['expenses']
+    total_sales = sum(row['sales'] for row in rows)
+    total_restock = sum(row['restock'] for row in rows)
+    total_other_expenses = sum(row['other_expenses'] for row in rows)
+    total_expenses = total_restock + total_other_expenses
+    return {
+        'period': period,
+        'start': start.isoformat(),
+        'end': (end - timedelta(days=1)).isoformat(),
+        'anchor': anchor.isoformat(),
+        'days': rows,
+        'total_sales': total_sales,
+        'total_restock': total_restock,
+        'total_other_expenses': total_other_expenses,
+        'total_expenses': total_expenses,
+        'net': total_sales - total_expenses,
+        'tickets': sum(row['tickets'] for row in rows),
+    }
+
+def _report_request_values():
+    period = request.args.get('period', 'daily')
+    anchor_value = request.args.get('date') or datetime.now(BOGOTA).date().isoformat()
+    if period not in {'daily', 'weekly', 'monthly'}:
+        raise ValueError('Selecciona día, semana o mes.')
+    try:
+        anchor = date.fromisoformat(anchor_value)
+    except ValueError as error:
+        raise ValueError('La fecha del reporte no es válida.') from error
+    return period, anchor
+
+@app.route('/reports')
+def reports():
+    return render_template('reports.html', today=datetime.now(BOGOTA).date().isoformat())
+
+@app.route('/api/reports/data')
+def reports_data():
+    try:
+        period, anchor = _report_request_values()
+        return jsonify(_build_sales_report(period, anchor))
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+
+@app.route('/reports/export.csv')
+def export_report_csv():
+    try:
+        period, anchor = _report_request_values()
+        report = _build_sales_report(period, anchor)
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    output = io.StringIO(newline='')
+    writer = csv.writer(output, delimiter=';')
+    writer.writerow(['Fecha', 'Ventas COP', 'Cantidad de ventas', 'Restocks COP',
+                     'Otros egresos COP', 'Egresos totales COP', 'Balance COP'])
+    for row in report['days']:
+        writer.writerow([row['date'], round(row['sales']), row['tickets'], round(row['restock']),
+                         round(row['other_expenses']), round(row['expenses']), round(row['net'])])
+    writer.writerow([])
+    writer.writerow(['TOTAL DEL PERIODO', round(report['total_sales']), report['tickets'],
+                     round(report['total_restock']), round(report['total_other_expenses']),
+                     round(report['total_expenses']), round(report['net'])])
+    filename = f"reporte-{period}-{report['start']}-a-{report['end']}.csv"
+    return Response('\ufeff' + output.getvalue(), mimetype='text/csv; charset=utf-8',
+                    headers={'Content-Disposition': f'attachment; filename={filename}'})
 
 # ─── VISTAS PRINCIPALES ────────────────────────────────────────────────────
 

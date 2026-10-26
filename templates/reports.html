@@ -1,0 +1,159 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-header mb-4 no-print">
+    <div>
+        <h1 class="page-title"><i class="bi bi-bar-chart-line text-primary"></i> Reportes</h1>
+        <p class="page-subtitle">Compara ventas, compras de inventario y otros egresos por periodo.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a id="download-report" class="btn-action btn-action-primary" href="#"><i class="bi bi-download"></i> Descargar CSV</a>
+        <button type="button" class="btn-action" onclick="printReport()"><i class="bi bi-printer"></i> Imprimir / Guardar PDF</button>
+    </div>
+</div>
+
+<div class="glass-panel mb-4 no-print">
+    <div class="glass-panel-body report-filters">
+        <div>
+            <label class="form-label-modern" for="report-period">Periodo</label>
+            <select id="report-period" class="form-control-modern">
+                <option value="daily">Diario</option>
+                <option value="weekly">Semanal</option>
+                <option value="monthly">Mensual</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label-modern" for="report-date">Fecha de referencia</label>
+            <input id="report-date" type="date" class="form-control-modern" value="{{ today }}">
+        </div>
+        <div class="report-range-help text-muted" id="report-range-help">Cargando reporte…</div>
+    </div>
+</div>
+
+<section id="reports-print-area">
+    <div class="report-print-heading">
+        <h1>Reporte de ventas y gastos</h1>
+        <p id="print-period-label"></p>
+        <small>Papelería Garaje · Valores en pesos colombianos (COP)</small>
+    </div>
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3"><div class="kpi-card kpi-green"><div class="kpi-icon"><i class="bi bi-cash-stack"></i></div><div class="kpi-body"><span class="kpi-label">Ventas</span><span class="kpi-value" id="kpi-sales">$0</span><span class="kpi-sub" id="kpi-tickets">0 ventas</span></div></div></div>
+        <div class="col-sm-6 col-xl-3"><div class="kpi-card kpi-red"><div class="kpi-icon"><i class="bi bi-box-arrow-in-down"></i></div><div class="kpi-body"><span class="kpi-label">Restocks</span><span class="kpi-value" id="kpi-restock">$0</span><span class="kpi-sub">Compras para inventario</span></div></div></div>
+        <div class="col-sm-6 col-xl-3"><div class="kpi-card kpi-red"><div class="kpi-icon"><i class="bi bi-receipt-cutoff"></i></div><div class="kpi-body"><span class="kpi-label">Otros egresos</span><span class="kpi-value" id="kpi-other">$0</span><span class="kpi-sub">Gastos no asociados a restock</span></div></div></div>
+        <div class="col-sm-6 col-xl-3"><div class="kpi-card kpi-indigo"><div class="kpi-icon"><i class="bi bi-wallet2"></i></div><div class="kpi-body"><span class="kpi-label">Balance del periodo</span><span class="kpi-value" id="kpi-net">$0</span><span class="kpi-sub">Ventas menos todos los egresos</span></div></div></div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-xl-8">
+            <div class="glass-panel h-100">
+                <div class="glass-panel-header"><div class="glass-panel-title"><i class="bi bi-bar-chart text-primary"></i> Ventas y egresos por día</div></div>
+                <div class="glass-panel-body chart-body">
+                    <div class="chart-legend"><span><i class="legend-dot legend-sales"></i> Ventas</span><span><i class="legend-dot legend-restock"></i> Restocks</span><span><i class="legend-dot legend-other"></i> Otros egresos</span></div>
+                    <canvas id="activity-chart" height="270" aria-label="Gráfica diaria de ventas y egresos"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="glass-panel h-100">
+                <div class="glass-panel-header"><div class="glass-panel-title"><i class="bi bi-graph-up text-primary"></i> Balance neto diario</div></div>
+                <div class="glass-panel-body chart-body"><canvas id="net-chart" height="270" aria-label="Gráfica del balance diario"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-panel">
+        <div class="glass-panel-header"><div class="glass-panel-title"><i class="bi bi-table text-primary"></i> Resumen diario</div></div>
+        <div class="glass-panel-body p-0"><div class="table-responsive">
+            <table class="table-modern report-table"><thead><tr><th>Fecha</th><th class="text-end">Ventas</th><th class="text-center">Tickets</th><th class="text-end">Restocks</th><th class="text-end">Otros egresos</th><th class="text-end">Balance</th></tr></thead>
+                <tbody id="report-table-body"><tr><td colspan="6" class="text-center py-4 text-muted">Cargando datos…</td></tr></tbody>
+                <tfoot><tr><th>Total del periodo</th><th id="sum-sales" class="text-end">$0</th><th id="sum-tickets" class="text-center">0</th><th id="sum-restock" class="text-end">$0</th><th id="sum-other" class="text-end">$0</th><th id="sum-net" class="text-end">$0</th></tr></tfoot>
+            </table>
+        </div></div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const periodInput = document.getElementById('report-period');
+    const dateInput = document.getElementById('report-date');
+    const fmt = value => new Intl.NumberFormat('es-CO', {style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(value)||0);
+    let reportData = null;
+
+    function drawActivity(rows) {
+        const canvas = document.getElementById('activity-chart');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.clientWidth || 600, height = 270, dpr = window.devicePixelRatio || 1;
+        canvas.width = width * dpr; canvas.height = height * dpr;
+        ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,width,height);
+        const pad = {left:72,right:12,top:12,bottom:38}, plotW=width-pad.left-pad.right, plotH=height-pad.top-pad.bottom;
+        const max=Math.max(1,...rows.flatMap(r=>[r.sales,r.restock,r.other_expenses]));
+        ctx.font='11px system-ui'; ctx.textAlign='right'; ctx.textBaseline='middle';
+        for(let i=0;i<=4;i++){
+            const y=pad.top+plotH-(plotH*i/4), value=max*i/4;
+            ctx.strokeStyle='#e5e7eb';ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(width-pad.right,y);ctx.stroke();
+            ctx.fillStyle='#475569';ctx.fillText(value>=1000000?`${(value/1000000).toFixed(1)}M`:value>=1000?`${Math.round(value/1000)}k`:Math.round(value),pad.left-8,y);
+        }
+        const groupW=plotW/Math.max(1,rows.length), barW=Math.max(2,Math.min(18,groupW*.19));
+        const series=[['sales','#10b981'],['restock','#ef4444'],['other_expenses','#f59e0b']];
+        rows.forEach((row,index)=>{
+            const center=pad.left+groupW*(index+.5);
+            series.forEach(([key,color],j)=>{
+                const h=(row[key]/max)*plotH, x=center+(j-1)*(barW+2)-barW/2;
+                ctx.fillStyle=color;ctx.fillRect(x,pad.top+plotH-h,barW,Math.max(0,h));
+            });
+            if(rows.length<=10 || index%5===0 || index===rows.length-1){
+                ctx.fillStyle='#475569';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(row.date.slice(8),center,height-pad.bottom+9);
+            }
+        });
+    }
+
+    function drawNet(rows) {
+        const canvas=document.getElementById('net-chart'),ctx=canvas.getContext('2d');
+        const width=canvas.clientWidth||350,height=270,dpr=window.devicePixelRatio||1;
+        canvas.width=width*dpr;canvas.height=height*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);
+        const pad={left:58,right:10,top:15,bottom:35},plotW=width-pad.left-pad.right,plotH=height-pad.top-pad.bottom;
+        const maxAbs=Math.max(1,...rows.map(r=>Math.abs(r.net))),zeroY=pad.top+plotH*(maxAbs/(2*maxAbs));
+        ctx.strokeStyle='#cbd5e1';ctx.beginPath();ctx.moveTo(pad.left,zeroY);ctx.lineTo(width-pad.right,zeroY);ctx.stroke();
+        ctx.fillStyle='#475569';ctx.font='11px system-ui';ctx.textAlign='right';ctx.fillText(fmt(maxAbs),pad.left-5,pad.top+5);ctx.fillText(fmt(-maxAbs),pad.left-5,height-pad.bottom);
+        const xAt=i=>pad.left+(rows.length===1?plotW/2:plotW*i/(rows.length-1));
+        const yAt=v=>pad.top+plotH*(maxAbs-v)/(2*maxAbs);
+        ctx.strokeStyle='#4f46e5';ctx.lineWidth=2;ctx.beginPath();
+        rows.forEach((r,i)=>i?ctx.lineTo(xAt(i),yAt(r.net)):ctx.moveTo(xAt(i),yAt(r.net)));ctx.stroke();
+        rows.forEach((r,i)=>{ctx.fillStyle=r.net>=0?'#059669':'#dc2626';ctx.beginPath();ctx.arc(xAt(i),yAt(r.net),3,0,Math.PI*2);ctx.fill();});
+    }
+
+    function render(data){
+        reportData=data;
+        const labels={daily:'Diario',weekly:'Semanal',monthly:'Mensual'};
+        const range=`${data.start} — ${data.end}`;
+        document.getElementById('report-range-help').textContent=`${labels[data.period]} · ${range}`;
+        document.getElementById('print-period-label').textContent=`${labels[data.period]} · ${range}`;
+        document.getElementById('kpi-sales').textContent=fmt(data.total_sales);
+        document.getElementById('kpi-tickets').textContent=`${data.tickets} ventas registradas`;
+        document.getElementById('kpi-restock').textContent=fmt(data.total_restock);
+        document.getElementById('kpi-other').textContent=fmt(data.total_other_expenses);
+        const net=document.getElementById('kpi-net');net.textContent=fmt(data.net);net.classList.toggle('text-danger',data.net<0);net.classList.toggle('text-success',data.net>=0);
+        document.getElementById('sum-sales').textContent=fmt(data.total_sales);
+        document.getElementById('sum-tickets').textContent=data.tickets;
+        document.getElementById('sum-restock').textContent=fmt(data.total_restock);
+        document.getElementById('sum-other').textContent=fmt(data.total_other_expenses);
+        document.getElementById('sum-net').textContent=fmt(data.net);
+        document.getElementById('report-table-body').innerHTML=data.days.map(row=>`<tr><td>${row.date}</td><td class="text-end">${fmt(row.sales)}</td><td class="text-center">${row.tickets}</td><td class="text-end">${fmt(row.restock)}</td><td class="text-end">${fmt(row.other_expenses)}</td><td class="text-end fw-bold ${row.net<0?'text-danger':'text-success'}">${fmt(row.net)}</td></tr>`).join('');
+        document.getElementById('download-report').href=`/reports/export.csv?period=${encodeURIComponent(data.period)}&date=${encodeURIComponent(data.anchor)}`;
+        drawActivity(data.days);drawNet(data.days);
+    }
+
+    async function loadReport(){
+        const url=`/api/reports/data?period=${encodeURIComponent(periodInput.value)}&date=${encodeURIComponent(dateInput.value)}`;
+        try{const response=await fetch(url);const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo cargar el reporte.');render(data);}
+        catch(error){document.getElementById('report-range-help').textContent=error.message;}
+    }
+    periodInput.addEventListener('change',loadReport);dateInput.addEventListener('change',loadReport);
+    window.addEventListener('resize',()=>{if(reportData){drawActivity(reportData.days);drawNet(reportData.days);}});
+    window.printReport=()=>{document.body.classList.add('reports-print');window.print();};
+    window.addEventListener('afterprint',()=>document.body.classList.remove('reports-print'));
+    loadReport();
+})();
+</script>
+{% endblock %}
