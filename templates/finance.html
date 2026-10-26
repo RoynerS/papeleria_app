@@ -7,9 +7,6 @@
         <h1 class="page-title"><i class="bi bi-graph-up-arrow text-primary"></i> Finanzas</h1>
         <p class="page-subtitle">Las compras de inventario y los demás egresos se reflejan en el balance.</p>
     </div>
-    <button class="btn-action btn-action-danger" data-bs-toggle="modal" data-bs-target="#modalAddExpense">
-        <i class="bi bi-plus-lg"></i> Registrar Egreso
-    </button>
 </div>
 
 <!-- ── KPI CARDS ── -->
@@ -19,7 +16,7 @@
             <div class="kpi-icon"><i class="bi bi-cash-stack"></i></div>
             <div class="kpi-body">
                 <span class="kpi-label">Ingresos Totales</span>
-                <span class="kpi-value">${{ "{:,.0f}".format(total_revenue) }}</span>
+                <span class="kpi-value">${{ "{:,.0f}".format(total_revenue) }} <small class="currency-code">COP</small></span>
                 <span class="kpi-sub">Hoy: ${{ "{:,.0f}".format(today_sales) }} · {{ sales_count }} ventas</span>
             </div>
         </div>
@@ -29,7 +26,7 @@
             <div class="kpi-icon"><i class="bi bi-cart-x"></i></div>
             <div class="kpi-body">
                 <span class="kpi-label">Gastos / Egresos</span>
-                <span class="kpi-value">${{ "{:,.0f}".format(total_spent) }}</span>
+                <span class="kpi-value">${{ "{:,.0f}".format(total_spent) }} <small class="currency-code">COP</small></span>
                 <span class="kpi-sub">Hoy: ${{ "{:,.0f}".format(today_expenses) }}</span>
             </div>
         </div>
@@ -39,7 +36,7 @@
             <div class="kpi-icon"><i class="bi bi-wallet2"></i></div>
             <div class="kpi-body">
                 <span class="kpi-label">Balance Neto</span>
-                <span class="kpi-value {{ 'text-success' if net_profit >= 0 else 'text-danger' }}">${{ "{:,.0f}".format(net_profit) }}</span>
+                <span class="kpi-value {{ 'text-success' if net_profit >= 0 else 'text-danger' }}">${{ "{:,.0f}".format(net_profit) }} <small class="currency-code">COP</small></span>
                 <span class="kpi-sub">
                     {% if net_profit >= 0 %}<i class="bi bi-arrow-up-right"></i> Superávit
                     {% else %}<i class="bi bi-arrow-down-right"></i> Déficit{% endif %}
@@ -55,15 +52,20 @@
         <div class="glass-panel-title">
             <i class="bi bi-clock-history text-primary"></i> Movimientos Recientes
         </div>
-        <ul class="nav nav-pills gap-1" id="financeTab" role="tablist">
+        <ul class="nav nav-pills gap-1 finance-tabs" id="financeTab" role="tablist">
             <li class="nav-item">
                 <button class="tab-pill active" data-bs-toggle="pill" data-bs-target="#tab-sales">
-                    Ventas ({{ recent_sales|length }})
+                    Ventas <span class="tab-count">{{ recent_sales|length }}</span>
                 </button>
             </li>
             <li class="nav-item">
                 <button class="tab-pill" data-bs-toggle="pill" data-bs-target="#tab-expenses">
-                    Gastos ({{ recent_expenses|length }})
+                    Gastos <span class="tab-count">{{ recent_expenses|length }}</span>
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="tab-pill" data-bs-toggle="pill" data-bs-target="#tab-new-expense">
+                    <i class="bi bi-plus-circle"></i> Nuevo egreso
                 </button>
             </li>
         </ul>
@@ -141,7 +143,7 @@
                                 </td>
                                 <td class="text-muted small">
                                     {% if e.quantity and e.quantity > 1 %}
-                                        {{ e.quantity }} × ${{ "{:,.0f}".format(e.unit_price or 0) }}
+                                        {{ e.quantity }} × ${{ "{:,.0f}".format(e.unit_price or 0) }} COP
                                     {% else %}—{% endif %}
                                 </td>
                                 <td><small class="text-muted">{{ e.date }}</small></td>
@@ -173,20 +175,16 @@
                     </table>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
 
 <!-- ════════════════════════════════════════
-     MODAL: AGREGAR EGRESO (General + Restock)
+     FORMULARIO: AGREGAR EGRESO (General + Restock)
 ═══════════════════════════════════════════ -->
-<div class="modal fade" id="modalAddExpense" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content modal-modern">
-            <div class="modal-header-modern">
-                <h5 class="modal-title-modern"><i class="bi bi-dash-circle-fill text-danger"></i> Registrar Egreso</h5>
-                <button type="button" class="btn-close-modern" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i></button>
-            </div>
+<div class="tab-pane fade" id="tab-new-expense">
+    <div class="finance-entry-panel">
+        <div class="finance-entry-heading">
+            <h2><i class="bi bi-plus-circle text-primary"></i> Registrar gasto o restock</h2>
+            <p class="text-muted mb-0">Elige el tipo de movimiento y completa los datos.</p>
+        </div>
             <!-- Tipo selector -->
             <div class="expense-type-switcher">
                 <button type="button" class="expense-type-btn active" id="btnGeneral" onclick="switchExpenseType('general')">
@@ -241,12 +239,12 @@
 
                     <!-- Cantidad + Precio unitario (solo Restock) -->
                     <div id="restock-fields" class="row g-2 mb-3" style="display:none;">
-                        <div class="col-5">
+                        <div class="col-12 col-sm-5">
                             <label class="form-label-modern">Cantidad</label>
                             <input type="number" id="restock-qty" min="1" step="1" class="form-control-modern"
                                 placeholder="0" oninput="calcRestockTotal()">
                         </div>
-                        <div class="col-7">
+                        <div class="col-12 col-sm-7">
                             <label class="form-label-modern">Precio Unitario (COP)</label>
                             <input type="number" id="restock-unit-price" min="0" step="1" class="form-control-modern"
                                 placeholder="0" oninput="calcRestockTotal()">
@@ -264,23 +262,24 @@
                         <div class="restock-preview-box mb-3">
                             <div class="d-flex justify-content-between">
                                 <span class="text-muted small">Subtotal</span>
-                                <span id="restock-sub-display" class="fw-semibold">$0</span>
+                                <span id="restock-sub-display" class="fw-semibold">$0 COP</span>
                             </div>
                             <div class="d-flex justify-content-between mt-1">
                                 <span class="text-muted small fw-bold">Total gasto</span>
-                                <span id="restock-total-display" class="fw-bolder text-danger">$0</span>
+                                <span id="restock-total-display" class="fw-bolder text-danger">$0 COP</span>
                             </div>
                         </div>
                         <input type="hidden" name="amount" id="exp-amount-restock" value="0">
                     </div>
                 </div>
-                <div class="modal-footer-modern">
-                    <button type="button" class="btn-action btn-action-ghost" data-bs-dismiss="modal">Cancelar</button>
+                <div class="modal-footer-modern finance-entry-footer">
                     <button type="submit" class="btn-action btn-action-danger" id="submitExpenseBtn">
                         <i class="bi bi-file-earmark-minus-fill"></i> Guardar Egreso
                     </button>
                 </div>
             </form>
+    </div>
+</div>
         </div>
     </div>
 </div>
@@ -289,7 +288,7 @@
      MODAL: EDITAR GASTO
 ═══════════════════════════════════════════ -->
 <div class="modal fade" id="modalEditExpense" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content modal-modern">
             <div class="modal-header-modern">
                 <h5 class="modal-title-modern"><i class="bi bi-pencil-fill text-primary"></i> Editar Gasto</h5>
@@ -322,17 +321,17 @@
                         </select>
                     </div>
                     <div class="row g-2 mb-3">
-                        <div class="col-4">
+                        <div class="col-12 col-sm-4">
                             <label class="form-label-modern">Cantidad</label>
                             <input type="number" name="quantity" id="edit-exp-qty" class="form-control-modern"
                                 min="1" value="1" oninput="calcEditExpense()">
                         </div>
-                        <div class="col-4">
+                        <div class="col-12 col-sm-4">
                             <label class="form-label-modern">P. Unitario</label>
                             <input type="number" name="unit_price" id="edit-exp-uprice" class="form-control-modern"
                                 min="0" value="0" oninput="calcEditExpense()">
                         </div>
-                        <div class="col-4">
+                        <div class="col-12 col-sm-4">
                             <label class="form-label-modern">Total (COP)</label>
                             <input type="number" name="amount" id="edit-exp-amount" class="form-control-modern"
                                 min="0" required>
@@ -354,7 +353,7 @@
      MODALES: CONFIRMAR ELIMINAR
 ═══════════════════════════════════════════ -->
 <div class="modal fade" id="modalDeleteExpense" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-sm">
         <div class="modal-content modal-modern">
             <div class="modal-body-modern text-center py-4">
                 <i class="bi bi-exclamation-triangle-fill text-danger fs-1 d-block mb-3"></i>
@@ -373,7 +372,7 @@
 </div>
 
 <div class="modal fade" id="modalDeleteSale" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-sm">
         <div class="modal-content modal-modern">
             <div class="modal-body-modern text-center py-4">
                 <i class="bi bi-exclamation-triangle-fill text-danger fs-1 d-block mb-3"></i>
@@ -413,6 +412,8 @@ function switchExpenseType(type) {
     document.getElementById('category-wrap').style.display           = isRestock ? 'none' : '';
 
     document.getElementById('exp-amount-direct').required = !isRestock;
+    document.getElementById('exp-amount-direct').disabled = isRestock;
+    document.getElementById('exp-amount-restock').disabled = !isRestock;
 
     const catInput = document.getElementById('exp-category');
     const restockProduct = document.getElementById('exp-product-id');
@@ -425,6 +426,8 @@ function switchExpenseType(type) {
         document.getElementById('exp-uprice-hidden').value = 0;
     }
 }
+
+document.addEventListener('DOMContentLoaded', () => switchExpenseType('general'));
 
 // ── Selector de producto en Restock ───────────────────────────────────────
 function onRestockProductSelect(sel) {
@@ -447,7 +450,7 @@ function calcRestockTotal() {
     const qty   = parseFloat(document.getElementById('restock-qty').value) || 0;
     const price = parseFloat(document.getElementById('restock-unit-price').value) || 0;
     const total = qty * price;
-    const fmt   = n => '$' + n.toLocaleString('es-CO', { maximumFractionDigits: 0 });
+    const fmt   = n => '$' + n.toLocaleString('es-CO', { maximumFractionDigits: 0 }) + ' COP';
 
     document.getElementById('restock-sub-display').textContent    = fmt(total);
     document.getElementById('restock-total-display').textContent   = fmt(total);
