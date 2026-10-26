@@ -610,8 +610,20 @@ a { text-decoration: none; }
 }
 
 /* Finance entry panel and compact, readable finance tabs */
-.finance-tabs { flex-wrap: wrap; align-items: center; }
-.finance-tabs .tab-pill { min-height: 40px; }
+.finance-tabs { flex-wrap: wrap; align-items: center; gap: .7rem !important; padding: .25rem; }
+.finance-tabs .tab-pill {
+    min-height: 42px;
+    padding: 8px 17px;
+    transition: color .2s ease, background-color .2s ease, border-color .2s ease,
+        box-shadow .2s ease, transform .2s ease;
+}
+.finance-tabs .tab-pill:hover { transform: translateY(-1px); }
+.finance-tabs .tab-pill:active { transform: scale(.98); }
+.finance-tabs .tab-pill.active { box-shadow: 0 3px 10px rgba(79,70,229,.12); }
+.finance-tabs .tab-pill:focus-visible { outline: 3px solid rgba(79,70,229,.25); outline-offset: 2px; }
+#tab-sales, #tab-expenses, #tab-new-expense { transition: opacity .22s ease, transform .22s ease; }
+#tab-sales.fade:not(.show), #tab-expenses.fade:not(.show), #tab-new-expense.fade:not(.show) { transform: translateY(6px); }
+#tab-sales.fade.show, #tab-expenses.fade.show, #tab-new-expense.fade.show { transform: translateY(0); }
 .finance-entry-panel { width: min(100%, 860px); margin: 0 auto; }
 .finance-entry-heading { padding: 1.5rem 1.5rem 1rem; }
 .finance-entry-heading h2 { color: var(--tx); font-size: 1.15rem; font-weight: 750; margin: 0 0 .35rem; }
@@ -1010,9 +1022,9 @@ a { text-decoration: none; }
 }
 
 @media (max-width: 575.98px) {
-    .finance-tabs { gap: .3rem !important; }
+    .finance-tabs { gap: .55rem !important; }
     .finance-tabs .nav-item { flex: 1 1 29%; }
-    .finance-tabs .tab-pill { padding: 7px 5px; min-height: 42px; font-size: .72rem; white-space: normal; }
+    .finance-tabs .tab-pill { padding: 8px 5px; min-height: 44px; font-size: .72rem; white-space: normal; }
     .finance-entry-heading { padding: 1.1rem 1rem .8rem; }
     .finance-entry-panel .expense-type-switcher { margin-inline: 1rem; flex-direction: column; }
     .finance-entry-panel .expense-type-btn { min-height: 46px; }
@@ -1024,4 +1036,9 @@ a { text-decoration: none; }
     .modal-footer-modern { flex-wrap: wrap; gap: .5rem; padding: .85rem 1rem; }
     .modal-footer-modern .btn-action { flex: 1 1 135px; justify-content: center; }
     .modal-body-modern { padding: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .finance-tabs .tab-pill,
+    #tab-sales, #tab-expenses, #tab-new-expense { transition: none !important; transform: none !important; }
 }
